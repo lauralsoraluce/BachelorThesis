@@ -1,0 +1,305 @@
+% !TeX root = ../tfg.tex
+% !TeX encoding = utf8
+
+\chapter{Documentación}\label{ch:primer-capitulo}
+
+\section{Convenciones y Notación}
+
+A lo largo de este trabajo, utilizaremos las siguientes convenciones de notación: 
+\begin{itemize}
+    \item \( U \) denotará el conjunto base sobre el que trabajamos.
+    \item \( F \) representará el conjunto finito de subconjuntos finitos de \(U\).
+    \item \( m \) indicará el número de elementos en \( F \).
+    \item \( F_1, F_2, ..., F_m \) serán los elementos de \( F \).
+    \item \( G \subseteq U \) será el subconjunto que buscamos recubrir.
+\end{itemize}
+
+Salvo que se indique lo contrario, mantendremos estas notaciones a lo largo del Trabajo para evitar ambigüedades y facilitar la lectura. \\
+
+Convenimos sin pérdida de generalidad que \(U\neq \emptyset\), \(F\neq \emptyset\)  \((m\neq 0)\), y que \(G\neq \emptyset\), pues en dichos casos no habría estudio que hacer. En principio, trabajaremos sin imponer restricciones al número de veces que podemos utilizar cada elementos de \(F\) en las operaciones, por lo que el hecho de que haya elementos repetidos en \(F\) equivale a coger varias veces un mismo elemento de \(F\). Por ello, podemos considerar que no hay elementos repetidos en \(F\).  \\
+
+¿¿¿¿¿¿¿¿¿¿HAY QUE IMPONER QUE NINGUNO DE LOS \(F_i=\emptyset\)???????????????? Si es que sí, no podríamos trabajar con muchas de las estructuras algebraicas que requieren que esté el vacío en ellas (anillo o álgebra de conjuntos), pero a la vez aumentaría el espacio de búsqueda. Si es que no, habría que imponer que \(\exists i\in \{1,...,m\}|F_i\neq \emptyset\), no???? Podríamos permitir conjuntos vacíos en \(F\), pero excluirlos de la selección final \(F'\). 
+
+\section{Introducción}
+
+El objetivo de este trabajo es recubrir un subconjunto \(G\) de un conjunto \(U\) a partir de una colección de subconjuntos \(F\), utilizando diferentes operaciones sobre estos subconjuntos. Lo ideal sería obtener una partición exacta de \(G\), es decir, cubrirlo completamente sin que queden parte de los subconjuntos escogidos por fuera de \(G\) y sin que haya solapamiento entre los subconjuntos escogidos. Sin embargo, esto no siempre va a ser posible, pues con sólo los subconjuntos en \(F\) puede que haya ciertos elementos de \(G\) que no están contemplados. En este caso, buscamos la mejor aproximación posible, basándonos en diferentes métricas. \\ 
+
+Formalmente, dado un conjunto \(U\), y un conjunto finito \(F\) de subconjuntos finitos de \(U\), queremos encontrar un nuevo subconjunto \(F'\subseteq F\) tal que, mediante operaciones como unión, intersección, etc., nos permitan construir una partición algebraica de \(G\) inducida por \(F\). \\
+
+Dicho de otra forma, queremos obtener un conjunto de subconjuntos disjuntos \(P_1,\dots,P_k\) que cumpla las siguientes condiciones: 
+\begin{itemize}
+    \item Forman un recubrimiento exacto de \(G\): \[G=\bigcup_{i=1}^{k}P_i\]
+    \item Son disjuntos dos a dos: \[P_i\cap P_j=\emptyset, \quad \forall i \neq j\]
+    \item Cada \(P_i\) se obtiene aplicando un número finito de operaciones de unión, intersección y complemento entre elementos de \(F\). 
+    \item No hay redundancia, es decir, no podemos eliminar ningún \(P_i\) sin dejar de cubrir \(G\).
+\end{itemize}
+
+Tras un estudio matemático exhaustivo del problema, procederemos a la parte informática. Para ello, implementaremos varios algoritmos (como Greedy, Hill Climbing, Backtracking o Programación Lineal) buscando maximizar o minimizar diferentes métricas, dependiendo del caso. Evaluaremos estos algoritmos mediante su rendimiento al cubrir el subconjunto \(G\), basándonos en las características observadas en la fase teórica del trabajo.
+
+\section{Impacto y aplicaciones}
+Nuestro problema es uno de recubrimiento y optimización. Esto podría aplicarse a numerosos casos en la vida real como en el cubrimiento de áreas físicas. Por ejemplo: se quiere poner un anuncio en un cartel, que llegue a cierto público. No nos interesa que la misma gente vea el cartel varias veces, tampoco que haya gente objetivo que nunca llegue a ver el cartel, ni que haya gente que vea el cartel y no sea nuestro objetivo. 
+
+
+
+El número de particiones posibles para un conjunto finito depende de su cardinal y se llama el número de Bell y viene definido por 
+\begin{itemize}
+    \item \(B(0)=1\)
+    \item \(B(n)= \sum_{k=0}^{n-1}B(k) \)
+\end{itemize}
+
+Cuando consideramos subconjuntos en el contexto de conjuntos algebráicos, uno de los primeros conceptos con los que nos topamos es el de \textbf{Conjunto Potencia}. Este representa el conjunto de todos los posibles subconjuntos de un conjunto. 
+
+\begin{definicion}
+    El conjunto potencia de \(U\), denotado \(\mathcal{P}(U)\), es el conjunto cuyos elementos son todos los subconjuntos de \(U\). Se escribe \[\mathcal{P}(U)=\{X|X\subseteq U\}\]
+    \cite{conj_potencia}
+\end{definicion}
+
+Es un concepto fundamental, pues cualquier conjunto de subconjuntos que consideremos, va a ser siempre subconjunto de \(\mathcal{P}(U)\). Aplicándolo a nuestro problema, sea cual sea el conjunto \(F\) que consideremos, \(F\subseteq \mathcal{P}(U)\).
+
+En este caso en el que no aplicamos más restricciones a \(F\), no podremos asegurar que \(G\) vaya a estar recubierto. 
+
+\begin{definicion}
+    Un anillo de conjuntos es una colección no vacía \(F\) de conjuntos, tal que si \(F_i, F_j \in F\)para \(i \in \{1,\dots m\}\), entonces \(F_i\cup F_j\in F\) y \(F_i\setminus F_j \in F\).
+    \cite{MeasureTheory}
+\end{definicion}
+
+Esto es equivalente a decir que, si \(F_i, F_j \in F\), entonces \(\bigcup_{i=1}^{n}F_i\) y \(\bigcap_{i=1}^nF_i\in F\).
+
+Teniendo esto en cuenta, el conjunto vacío y el conjunto \(\mathcal{P}(X)\) son anillos de conjuntos. 
+
+\begin{definicion}
+    Un álgebra de conjuntos (también a veces conocido como campo de conjuntos) es una colección no vacía \(F\) de conjuntos tal que: 
+    \begin{itemize}
+        \item si \(F_i\in F\) y \(F_j \in F\), entonces \(F_i\cup F_j \in F\)
+        \item si \(F_i\in F\), entonces \(F_i' \in F\).
+    \end{itemize}
+    \cite{MeasureTheory}
+\end{definicion}
+
+Así, todo álgebra de conjuntos, es también un anillo. 
+
+\begin{definicion}
+    Un semianillo es una colección no vacía \(F\) de conjuntos tal que: 
+    \begin{itemize}
+        \item si \(F_i, F_j\in F\) entonces \(F_i\cap F_j \in F\)
+        \item si \(F_i, F_j \in F\) y \(F_i\subset F_j\), entonces \(\exists \{C_0,\dots,C_n\}\) una colección finita de conjuntos de \(F\), tal que \(F_i = C_0 \subset C_1 \subset \dots \subset C_n = F_j \) y \(D_i = C_i\setminus C_{i-1} \in F \quad \forall i=1,\dots,n\).
+    \end{itemize}
+    \cite{MeasureTheory}
+\end{definicion}
+
+De nuevo, todos los semianillos siempre contienen al conjunto vacío. 
+
+\begin{definicion}
+    Un \(\sigma-anillo\) es una colección no vacía \(F\) de conjuntos tal que
+    \begin{itemize}
+        \item si \(F_i, F_j\in F\), entonces \(F_i\setminus F_j \in F\)
+        \item si \(F_i \in F, \quad \forall i=1,\dots\), entonces \(\bigcup_{i=1}^\infty F_i \in F\). 
+    \end{itemize}
+    \cite{MeasureTheory}
+\end{definicion}
+
+\section{PROGRAMACIÓN LINEAL}
+Otra idea que merece la pena explorar al resolver nuestro problema, es la programación lineal. Sabemos que en programación lineal, tenemos que establecer una expresión matemática en términos de variables, que va a ser la que queremos minimizar o maximizar. Aplicaremos las restricciones del problema, que serán también lineales. Sabemos que la programación encuentra siempre la mejor solución y además no pierde ninguna solución posible. 
+
+\section{Complejidad computacional}
+Hablar de conceptos como NP-completo o NP-duro y Set Cover Problem, Exact Cover Problem o Boolean Satisfiability. 
+
+Este documento es una plantilla para la elaboración de un trabajo fin de Grado siguiendo los \href{https://grados.ugr.es/matematicas/pages/infoacademica/tfg/requisitosTFG}{requisitos} de la comisión de Grado en Matemáticas de la Universidad de Granada que, a fecha de junio de 2023, son las siguientes:
+
+\begin{itemize}
+  \item La  memoria  debe  realizarse  con  un  procesador  de  texto  científico,  preferiblemente (La)TeX.
+  \item La portada  debe contener  el  logo  de  la UGR,  incluir  el  título del TFG, el nombre del estudiante y especificar el grado, la facultad y el curso actual.
+  \item La contraportada contendrá además el nombre del tutor o tutores.
+  \item La memoria debe necesariamente incluir:
+    \begin{itemize}
+      \item Declaración explícita firmada en la que se asume la originalidad del trabajo, entendida en el sentido de que no ha utilizado fuentes sin citarlas debidamente. Esta declaración se puede descargar en la web del Grado.
+      \item un índice detallado de capítulos y secciones,
+      \item un resumen amplio en inglés del trabajo realizado (se recomienda entre 800 y 1500 palabras),
+      \item una introducción en la que se describan claramente los objetivos previstos inicialmente en la propuesta de TFG, indicando si han sido o no alcanzados, los antecedentes importantes para el desarrollo, los resultados obtenidos, en su caso y las principales fuentes consultadas,
+      \item una bibliografía final que incluya todas las referencias utilizadas.
+    \end{itemize}
+  \item Se recomienda que la extensión de la memoria sea de unas 50 páginas, sin incluir posibles apéndices.
+\end{itemize}
+
+Para generar el pdf a partir de la plantilla basta compilar el fichero \texttt{tfg.tex}. Es conveniente leer los comentarios contenidos en dicho fichero pues ayudarán a entender mejor como funciona la plantilla. 
+
+La estructura de la plantilla es la siguiente\footnote{Los nombres de las carpetas no se han acentuado para evitar problemas en sistemas con Windows}: 
+\begin{itemize}
+  \item Carpeta \textbf{preliminares}: contiene los siguientes archivos
+    \begin{description}
+      \item[\texttt{dedicatoria.tex}] Para la dedicatoria del trabajo (opcional)
+      \item[\texttt{agradecimientos.tex}] Para los agradecimientos del trabajo (opcional)
+      \item[\texttt{introduccion.tex}] Para la introducción (obligatorio)
+      \item[\texttt{summary.tex}] Para el resumen en inglés (obligatorio)
+      \item[\texttt{tablacontenidos.tex}] Genera de forma automática la tabla de contenidos, el índice de figuras y el índice de tablas. Si bien la tabla de contenidos es conveniente incluirla, el índice de figuras y tablas es opcional. Por defecto está desactivado. Para mostrar dichos índices hay que editar este fichero y quitar el comentario a \verb+\listoffigures+ o \verb+\listoftables+ según queramos uno de los índices o los dos. En este archivo también es posible habilitar la inclusión de un índice de listados de código (si estos han sido incluidos con el paquete \texttt{listings})
+  \end{description}
+  El resto de archivos de dicha carpeta no es necesario editarlos pues su contenido se generará automáticamente a partir de los metadatos que agreguemos en \texttt{tfg.tex}
+
+  \item Carpeta \textbf{capitulos}: contiene los archivos de los capítulos del TFG. Añadir tantos archivos como sean necesarios. Este capítulo es \texttt{capitulo01.tex}.
+
+  \item Carpeta \textbf{apendices}: Para los apéndices (opcional)
+  \item Carpeta \textbf{img}: Para incluir los ficheros de imagen que se usarán en el documento.
+    
+  \item Fichero \texttt{library.bib}: Para incluir las referencias bibliográficas en formato \texttt{bibtex}. Es útil la herramienta \href{https://www.doi2bib.org/}{doi2bib} para generar de forma automática el código bibtex de una referencia a partir de su \textsc{doi}  así como la base de datos bibliográfica \href{https://mathscinet.ams.org}{MathSciNet}. Para que una referencia aparezca en el pdf no basta con incluirla en el fichero \texttt{library.bib}, es necesario además \emph{citarla} en el documento usando el comando \verb+\cite+. Si queremos mostrar todos las referencias incluidas en el fichero \texttt{library.bib} podemos usar \verb+\cite{*}+ aunque esta opción no es la más adecuada. Se aconseja que los elementos de la bibliografía estén citados al menos una vez en el documento (y de esa forma aparecerán de forma automática en la lista de referencias).
+
+  \item Fichero \texttt{glosario.tex}: Para incluir un glosario en el trabajo (opcional). Si no queremos incluir un glosario deberemos borrar el comando \verb+\input{glosario.tex}+ del fichero \texttt{tfg.tex} y posteriormente borrar el fichero \texttt{glosario.tex}
+
+   \item Fichero \texttt{tfg.tex}: El documento maestro del TFG que hay que compilar con \LaTeX\ para obtener el pdf. En dicho documento hay que cambiar la \emph{información del título del \textsc{tfg} y el autor así como los tutores}.
+\end{itemize}
+
+
+
+\section{Elementos del texto}
+
+En esta sección presentaremos diferentes ejemplos de los elementos de texto básico. Conviene consultar el contenido de \texttt{capitulos/capitulo01.tex} para ver cómo se han incluido.
+
+\subsection{Listas}
+En \LaTeX\ tenemos disponibles los siguientes tipos de listas:
+
+Listas enumeradas:
+\begin{enumerate}
+  \item item 1
+  \item item 2
+  \item item 3
+\end{enumerate}
+
+Listas no enumeradas
+\begin{itemize}
+  \item item 1
+  \item item 2
+  \item item 3
+  \end{itemize}
+
+Listas descriptivas
+\begin{description}
+  \item[termino1] descripción 1
+  \item[termino2] descripción 2
+\end{description}
+  
+\subsection{Tablas y figuras}
+
+En la \autoref{tb:ejemplo-tabla} o la \autoref{fig:logo-ugr} podemos ver\ldots
+
+\begin{table}[htpb]
+  \centering
+  \begin{tabular}{ccc} \toprule
+    \multicolumn{2}{c}{Agrupados} \\ \cmidrule(r){1-2}
+    cabecera & cabecera & cabecera          \\ \midrule
+    elemento & elemento & elemento          \\ 
+    elemento & elemento & elemento          \\ 
+    elemento & elemento & elemento          \\ \bottomrule
+  \end{tabular}
+  \caption{Ejemplo de tabla}
+  \label{tb:ejemplo-tabla}
+\end{table}
+
+\begin{figure}[htpb]
+  \centering
+  \includegraphics[width=0.5\textwidth]{logo-ugr}
+  \caption{Logotipo de la Universidad de Granada}
+  \label{fig:logo-ugr}
+\end{figure}
+
+\section{Entornos matemáticos}\label{sec:entornos-matematicos}
+
+La plantilla tiene definidos varios entornos matemáticos cuyo nombre es el mismo omitiendo los acentos. Así, para incluir una \emph{proposición} usaríamos:
+
+\begin{verbatim}
+\begin{proposicion}
+texto de la proposición
+\end{proposicion} 
+\end{verbatim}
+
+Ver el código fuente del archivo \texttt{documentacion.tex} en la carpeta \texttt{capitulos} para el resto de ejemplos.
+
+\begin{teorema}\label{thm:teorema}
+Esto es un ejemplo de teorema.
+\end{teorema}
+
+\begin{proposicion}
+Ejemplo de proposición
+\end{proposicion}
+
+\begin{lema}
+Ejemplo de lema
+\end{lema}
+
+\begin{corolario}
+Ejemplo de corolario
+\end{corolario}
+
+\begin{definicion}
+Ejemplo de definición
+\end{definicion}
+
+\begin{observacion}
+Ejemplo de observación
+\end{observacion}
+
+Adicionalmente está definido el entorno \texttt{teorema*} que permite incluir un teorema sin numeración:
+
+\begin{teorema*}[Fórmula de Gauß-Bonnet]
+  Sea $S$ una superficie compacta y $K$ su curvatura de Gauß. Entonces
+\begin{equation}
+  \int_S K = 2\pi\chi(S)
+\end{equation}
+donde $\chi(S)$ es la característica de Euler de $S$.
+\end{teorema*}
+
+Las fórmulas matemáticas se escriben entre símbolos de dólar \$ si van en línea con el texto o bien usando el entorno%
+\footnote{
+  También es posible delimitar una ecuación mediante los comandos \texttt{$\backslash$[} y \texttt{$\backslash$]} pero éstas nunca llevarán numeración aunque añadamos una etiqueta y las referenciemos (ver \autoref{sec:referencias}).
+} 
+\texttt{equation} cuando queremos que se impriman centradas en una línea propia, como el siguiente ejemplo
+\begin{equation}\label{eq:identidad-pitagorica}
+  \cos^2 x + \sin^2 x = 1.
+\end{equation}
+
+
+Gracias al paquete \texttt{mathtools}, las ecuaciones escritas dentro del entorno \texttt{equation} llevarán numeración de forma automática si son referenciadas  en cualquier parte del documento (por ejemplo la identidad Pitagórica~\eqref{eq:identidad-pitagorica}, ver el código de los dos anteriores ejemplos y la \autoref{sec:referencias} para más información sobre referencias cruzadas en el documento).
+
+\section{Listados de código}
+
+Podemos incluir un archivo externo de código mediante el comando \texttt{lstinputlisting} especificando su nombre completo (incluyendo la extensión) y usando la opción \texttt{inputpath} para indicar la ruta hacia el fichero (siempre referida a la carpeta principal de la plantilla) así como la opción \texttt{language} para indicar el lenguaje de programación en que está escrito (esto permitirá a \LaTeX\ colorear adecuadamente el código). Además, si lo consideramos necesario, podemos indicar las líneas que queremos mostrar (ver el código fuente del \autoref{code:prime}). Consultar todas las opciones posibles en la \href{https://osl.ugr.es/CTAN/macros/latex/contrib/listings/listings.pdf}{documentación del paquete \texttt{listings}}.
+
+\lstinputlisting[inputpath=code, language=R, linerange={11-17}, firstnumber={11}, caption={Extracto código (líneas de 11 a 17) del fichero \texttt{primeR.r}}, label={code:prime}]{primeR.r}
+
+Alternativamente, podemos incluir el código en un entorno \texttt{lstlisting} como el \autoref{code:perceptron}
+
+\begin{lstlisting}[caption={Implementación de un perceptrón}, label={code:perceptron}, language={python}]
+def dot(v, w):
+    """Producto escalar de v y w, |$\color{comment}v_0 \cdot   w_0 + \cdots + v_n \cdot w_n$|"""
+    return sum(v_i * w_i for v_i, w_i in zip(v, w))
+
+def funcion_activacion(x):
+    """1 si la entrada es mayor o igual que 1, 0 en otro caso."""
+    return 1 if x >= 0 else 0
+
+def perceptron(entrada, pesos):
+    """1 si el perceptron se activa, 0 en otro caso"""
+    return funcion_activacion(dot(entrada, pesos))
+\end{lstlisting}
+
+La opción \texttt{float} al incluir un listado de código permitará a dicho bloque ``flotar'' como si fuese un entorno \texttt{figure} y de esta manera evitaremos que se corte al final de una página.
+
+
+
+\section{Referencias a elementos del texto}\label{sec:referencias}
+
+Para las referencias a los elementos del texto (secciones, capítulos, teoremas,\ldots) se procede de la siguiente manera:
+\begin{itemize}
+  \item Se \emph{marca} el elemento (justo después del mismo si se trata de un capítulo o sección o en el interior del \emph{entorno} en otro caso), mediante el comando \verb+\label{+\emph{etiqueta}\verb+}+, donde \emph{etiqueta} debe ser un identificador único.
+  \item Para crear una referencia al elemento en cualquier otra parte del texto se usa el comando \verb+\ref{+\emph{etiqueta}\verb+}+ (únicamente imprime la numeración asociada a dicho elemento, por ejemplo \ref{ch:primer-capitulo} o \ref{thm:teorema}) o bien \verb+\autoref{+\emph{etiqueta}\verb+}+ (imprime la numeración del elemento así como un texto previo indicando su tipo, por ejemplo \autoref{ch:primer-capitulo} o \autoref{thm:teorema})
+\end{itemize}
+
+
+
+
+\section{Bibliografía e índice}
+
+Esto es un ejemplo de texto en un capítulo. Incluye varias citas tanto a libros~\cite{Aigner2018}, artículos de investigación~\cite{Euler1985}, recursos online~\cite{EulerWiki} (páginas web), tesis~\cite{CitekeyPhdthesis}, trabajo fin de máster~\cite{CitekeyMastersthesis}, trabajo fin de grado~\cite{CiteKeyBachelorsthesis} así como artículos sin publicar (preprints) \cite{castroinfantes2022conjugate} (en estos últimos usar el campo \texttt{note} para añadir la información relevante). 
+
+Ver el fichero \texttt{library.bib} para las distintas plantillas. Cada nueva referencia debe añadirse en dicho fichero siguiendo el estilo del código \texttt{bibtex} según el tipo de referencia (página web, tesis, trabajo fin de grado o máster, artículo de investigación, libro,\ldots). Alternativamente se puede usar la web \href{https://zbib.org}{https://zbib.org} para generar automáticamente el código \texttt{bibtex}.
+
+
+\endinput
