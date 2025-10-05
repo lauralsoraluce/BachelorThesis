@@ -1,217 +1,198 @@
 #include <iostream>
 #include <vector>
-#include <set>
+#include <bitset>
 #include <string>
-#include <algorithm>
 #include <chrono>
 #include <random>
 #include <fstream>
 #include <sstream>
-#include <filesystem>  // C++17
 #include <iomanip>
-#include <regex>
-#include <cmath>
+#include <set>
 
 using namespace std;
 using namespace chrono;
 
-enum class Metric { JACCARD, PRECISION, SIZE, F1, ERROR };
+const int MAX_N = 1024;
+using Bitset = bitset<MAX_N>;
 
-static Metric parse_metric(std::string s) {
-    for (auto& c : s) c = std::tolower(c);
-    if (s == "jaccard") return Metric::JACCARD;
-    if (s == "precision") return Metric::PRECISION;
-    if (s == "size" || s == "|a|" || s == "tam") return Metric::SIZE;
-    if (s == "f1") return Metric::F1;
-    if (s == "error" || s == "err") return Metric::ERROR;
-    return Metric::JACCARD; // por defecto
-}
+/* OPERACIONES BITSET */
+inline Bitset set_union(const Bitset& A, const Bitset& B) { return A | B; }
+inline Bitset set_intersect(const Bitset& A, const Bitset& B) { return A & B; }
+inline Bitset set_difference(const Bitset& A, const Bitset& B) { return A & (~B); }
 
-static inline double safe_div(double num, double den) {
-    return den == 0.0 ? 0.0 : (num / den);
-}
-
-struct Confusion {
-    double TP, FP, FN, TN;
-    int A_size;
+/* ESTRUCTURA EXPRESIÓN */
+struct Expression {
+    Bitset conjunto;
+    string expr_str;
+    
+    Expression(Bitset c, string s) : conjunto(c), expr_str(s) {}
 };
 
-static Confusion compute_confusion(const std::set<int>& A,
-                                   const std::set<int>& G,
-                                   const std::set<int>& U) {
-    size_t tp=0, fp=0, fn=0;
-    for (int x : A) { if (G.count(x)) ++tp; else ++fp; }
-    for (int x : G) { if (!A.count(x)) ++fn; }
-    size_t a_size = A.size(), g_size = G.size(), u_size = U.size();
-    size_t a_union_g = a_size + g_size - tp;
-    size_t tn = (u_size >= a_union_g) ? (u_size - a_union_g) : 0;
+/* MEDIDAS */
+enum class Metric { JACCARD, PRECISION, SIZE, F1, ERROR };
 
-    return { (double)tp, (double)fp, (double)fn, (double)tn, (int)a_size };
+static Metric parse_metric(string s) {
+    for (auto& c : s) c = tolower(c);
+    if (s == "jaccard") return Metric::JACCARD;
+    if (s == "precision") return Metric::PRECISION;
+    if (s == "size") return Metric::SIZE;
+    if (s == "f1") return Metric::F1;
+    if (s == "error") return Metric::ERROR;
+    return Metric::JACCARD;
 }
 
 static const char* metric_name(Metric m) {
     switch(m){
         case Metric::JACCARD: return "jaccard";
-        case Metric::PRECISION:  return "precision";
-        case Metric::SIZE:    return "size";
+        case Metric::PRECISION: return "precision";
+        case Metric::SIZE: return "size";
         case Metric::F1: return "f1";
         case Metric::ERROR: return "error";
     }
     return "unknown";
 }
 
-template <typename T>
-std::string set_to_str(const std::set<T>& s) {
-    std::ostringstream oss;
+inline double safe_div(double num, double den) {
+    return den == 0.0 ? 0.0 : (num / den);
+}
+
+// Función de scoring
+inline double M(const Bitset& A, const Bitset& G, int n, Metric metric) {
+    size_t tp = (A & G).count();
+    size_t a_size = A.count();
+    size_t g_size = G.count();
+    size_t fp = a_size - tp;
+    size_t fn = g_size - tp;
+    
+    double dtp = (double)tp;
+    double dfp = (double)fp;
+    double dfn = (double)fn;
+
+    switch (metric) {
+        case Metric::JACCARD:
+            return safe_div(dtp, dtp + dfp + dfn);
+        case Metric::PRECISION:
+            return safe_div(dtp, dtp + dfp);
+        case Metric::SIZE:
+            return -static_cast<double>(fn);
+        case Metric::F1: {
+            double prec = safe_div(dtp, dtp + dfp);
+            double rec = safe_div(dtp, dtp + dfn);
+            return safe_div(2.0 * prec * rec, prec + rec);
+        }
+        case Metric::ERROR:
+            return safe_div(dfp + dfn, (double)n);
+    }
+    return 0.0;
+}
+
+/* CONVERSIÓN */
+string bitset_to_str(const Bitset& bs, int n) {
+    ostringstream oss;
     oss << "{";
     bool first = true;
-    for (const auto& x : s) {
-        if (!first) oss << ",";
-        oss << x;
-        first = false;
+    for (int i = 0; i < n; i++) {
+        if (bs[i]) {
+            if (!first) oss << ",";
+            oss << i;
+            first = false;
+        }
     }
     oss << "}";
     return oss.str();
 }
 
-std::string family_to_str(const std::vector<std::set<int>>& F) {
-    std::ostringstream oss;
+string family_to_str(const vector<Bitset>& F, int n) {
+    ostringstream oss;
     oss << "[";
     for (size_t i = 0; i < F.size(); ++i) {
         if (i > 0) oss << " ";
-        oss << "F" << i << "=" << set_to_str(F[i]);
+        oss << "F" << i << "=" << bitset_to_str(F[i], n);
     }
     oss << "]";
     return oss.str();
 }
 
-// Función para generar familia F de subconjuntos aleatorios
-vector<set<int>> generar_F(const set<int>& U, int num_subconjuntos, int tam_min, int tam_max, int seed=123) {
-    vector<set<int>> F_final;
-    set<set<int>> F; // Para evitar subconjuntos duplicados
-    vector<int> universo(U.begin(), U.end());
-    
+/* GENERACIÓN */
+vector<Bitset> generar_F(int n, int num_subconjuntos, int tam_min, int tam_max, int seed=123) {
+    vector<Bitset> F;
     mt19937 gen(seed);
     uniform_int_distribution<int> dist_tam(tam_min, tam_max);
-    uniform_int_distribution<int> dist_idx(0, universo.size() - 1);
+    uniform_int_distribution<int> dist_idx(0, n - 1);
     
-    // Generamos 'num_subconjuntos' subconjuntos aleatorios
-    for (int i = 0; i < num_subconjuntos; i++) {
-        set<int> subconjunto;
+    int intentos = 0;
+    int max_intentos = num_subconjuntos * 100;
+    
+    while (F.size() < num_subconjuntos && intentos < max_intentos) {
+        Bitset subconjunto;
         int tam = dist_tam(gen);
+        int count = 0;
         
-        // Generar subconjunto único de tamaño 'tam' 
-        while (subconjunto.size() < tam) {
-            subconjunto.insert(universo[dist_idx(gen)]);
+        while (count < tam && count < n) {
+            int idx = dist_idx(gen);
+            if (!subconjunto[idx]) {
+                subconjunto[idx] = 1;
+                count++;
+            }
         }
         
-        // Insertar solo si no está ya en F
-        F.insert(subconjunto);
+        if (count > 0) {
+            bool duplicado = false;
+            for (const auto& existing : F) {
+                if (existing == subconjunto) {
+                    duplicado = true;
+                    break;
+                }
+            }
+            if (!duplicado) F.push_back(subconjunto);
+        }
+        intentos++;
     }
-    F_final = vector<set<int>>(F.begin(), F.end());
-    return F_final;
+    
+    return F;
 }
 
-// Función para generar conjunto objetivo G
-set<int> generar_G(const set<int>& U, int tam, int seed=456) {
-    set<int> G;
-    vector<int> universo(U.begin(), U.end());
-    
+Bitset generar_G(int n, int tam, int seed=456) {
+    Bitset G;
     mt19937 gen(seed);
-    uniform_int_distribution<int> dist_idx(0, universo.size() - 1);
+    uniform_int_distribution<int> dist_idx(0, n - 1);
     
-    // Generar 'tam' elementos aleatorios
-    while (G.size() < tam) {
-        G.insert(universo[dist_idx(gen)]);
+    int count = 0;
+    while (count < tam) {
+        int idx = dist_idx(gen);
+        if (!G[idx]) {
+            G[idx] = 1;
+            count++;
+        }
     }
-    
     return G;
 }
 
-// Estructura para guardar conjunto + expresión que lo generó
-struct Expression {
-    set<int> conjunto;      // El conjunto resultante (ordenado para eficiencia)
-    string expr_str;        // La expresión como string (para mostrar)
-    
-    Expression(set<int> c, string s) : conjunto(c), expr_str(s) {}
-};
-
-// Operaciones de conjuntos (optimizadas para set ordenado)
-set<int> set_union(const set<int>& A, const set<int>& B) {
-    set<int> result;
-    set_union(A.begin(), A.end(), B.begin(), B.end(), 
-              inserter(result, result.begin()));
-    return result;
-}
-
-set<int> set_intersect(const set<int>& A, const set<int>& B) {
-    set<int> result;
-    set_intersection(A.begin(), A.end(), B.begin(), B.end(), 
-                     inserter(result, result.begin()));
-    return result;
-}
-
-set<int> set_difference(const set<int>& A, const set<int>& B) {
-    set<int> result;
-    set_difference(A.begin(), A.end(), B.begin(), B.end(), 
-                   inserter(result, result.begin()));
-    return result;
-}
-
-// Función de medida - IMPLEMENTAR LA QUE QUERAMOS
-double M(const Expression& e, const std::set<int>& G, const std::set<int>& U, Metric metric) {
-    const Confusion c = compute_confusion(e.conjunto, G, U);
-    const double TP = c.TP, FP = c.FP, FN = c.FN, TN = c.TN;
-
-    switch (metric) {
-        case Metric::JACCARD:
-            return safe_div(TP, TP + FP + FN);           // |A∩G| / |A∪G|
-        case Metric::PRECISION:
-            return safe_div(TP, TP + FP);                // |A∩G| / |G|
-        case Metric::SIZE:
-            return -static_cast<double>(set_difference(G, e.conjunto).size());       // minimizar |G\A| -> maximizamos -|G\A|
-        case Metric::F1: {
-            double prec = safe_div(double(TP), double(TP) + double(FP));
-            double rec = safe_div(double(TP), double(TP) + double(FN));
-            return safe_div(2.0 * prec * rec, prec + rec);
-        }
-        case Metric::ERROR:
-            return safe_div(FP + FN, U.size());        // (|A∩G| + |A^c ∩ G^c|) / |U|
-     }
-    return 0.0;
-}
-
-
+/* BÚSQUEDA EXHAUSTIVA */
 vector<vector<Expression>> exhaustive_search(
-    const vector<set<int>>& F,  // Familia de subconjuntos
-    const set<int>& U,           // Universo
-    const set<int>& G,           // Conjunto objetivo
-    int k                       // Máximo de operaciones
-    )
+    const vector<Bitset>& F,
+    const Bitset& U,
+    int n,
+    int k)
 {
-    // Inicializar expr[s] para s = 0 hasta k
     vector<vector<Expression>> expr(k + 1);
     
-    // expr[0] = F ∪ {U} (expresiones base sin operaciones)
-    for (int i = 0; i < F.size(); i++) {
+    // expr[0] = F ∪ {U}
+    for (size_t i = 0; i < F.size(); i++) {
         expr[0].push_back(Expression(F[i], "F" + to_string(i)));
     }
     expr[0].push_back(Expression(U, "U"));
     
     // Generar expresiones con s operaciones
     for (int s = 1; s <= k; s++) {
-        // Para cada operación
-        for (int op = 0; op < 3; op++) {  // 0:∪, 1:∩, 2:
+        for (int op = 0; op < 3; op++) {
             string op_str = (op == 0) ? " ∪ " : (op == 1) ? " ∩ " : " \\ ";
             
-            // Para cada partición de s operaciones
             for (int a = 0; a < s; a++) {
-                // Para cada par de expresiones
-                for (int i = 0; i < expr[a].size(); i++) {
-                    for (int j = 0; j < expr[s - a - 1].size(); j++) {
+                for (size_t i = 0; i < expr[a].size(); i++) {
+                    for (size_t j = 0; j < expr[s - a - 1].size(); j++) {
+                        Bitset new_set;
                         
-                        set<int> new_set;
-                        // Aplicar la operación sobre los conjuntos
                         if (op == 0) {
                             new_set = set_union(expr[a][i].conjunto, 
                                                expr[s-a-1][j].conjunto);
@@ -223,7 +204,6 @@ vector<vector<Expression>> exhaustive_search(
                                                     expr[s-a-1][j].conjunto);
                         }
                         
-                        // Crear string de la expresión
                         string new_expr = "(" + expr[a][i].expr_str + op_str + 
                                          expr[s-a-1][j].expr_str + ")";
                         
@@ -232,28 +212,28 @@ vector<vector<Expression>> exhaustive_search(
                 }
             }
         }
-        cout << "Expresiones con " << s << " operación(es): " 
-             << expr[s].size() << endl;
+        cout << "Expresiones con " << s << " operación(es): " << expr[s].size() << endl;
     }
     
     // Añadir conjunto vacío a expr[0]
-    expr[0].push_back(Expression(set<int>(), "∅"));
+    expr[0].push_back(Expression(Bitset(), "∅"));
     
     return expr;
 }
 
-Expression evaluar_subconjuntos(const vector<vector<Expression>>& expr, 
-                                                 const set<int>& G, 
-                                                 const set<int>& U, 
-                                                 int k, 
-                                                 Metric metric) {
-    // Variables para el mejor resultado
+Expression evaluar_subconjuntos(
+    const vector<vector<Expression>>& expr,
+    const Bitset& G,
+    int n,
+    int k,
+    Metric metric)
+{
     double best_score = -99999;
-    Expression e_best(set<int>(), "");
+    Expression e_best(Bitset(), "");
 
     for (int s = 0; s <= k; s++) {
-        for (int e = 0; e < expr[s].size(); e++) {
-            double score = M(expr[s][e], G, U, metric);
+        for (size_t e = 0; e < expr[s].size(); e++) {
+            double score = M(expr[s][e].conjunto, G, n, metric);
             
             if (score > best_score) {
                 best_score = score;
@@ -261,92 +241,90 @@ Expression evaluar_subconjuntos(const vector<vector<Expression>>& expr,
             }
         }
     }
-        
+    
     return e_best;
 }
 
-
 int main(int argc, char* argv[]) {
-    // ---- DEFAULTS ----
-    int k = 2; // Número máximo de operaciones 
-    int n = 10; // Tamaño del universo 
-    string txt_file; 
+    int k = 2;
+    int n = 10;
+    string txt_file;
     unsigned seed = 123;
     Metric metric = Metric::JACCARD;
 
-    // ---- PARSE RÁPIDO ----
     for (int i=1; i<argc; ++i){
         string a = argv[i];
         auto next = [&](){ return (i+1<argc) ? string(argv[++i]) : string(); };
-        if (a == "--n")        n = stoi(next());
-        else if (a == "--k")   k = stoi(next());
+        if (a == "--n") n = stoi(next());
+        else if (a == "--k") k = stoi(next());
         else if (a == "--txt") txt_file = next();
         else if (a == "--seed") seed = (unsigned)stoul(next());
+        else if (a == "--metric") metric = parse_metric(next());
         else if (a == "--help") {
-            cerr << "Uso: ./prog [--n N] [--k K] [--txt fichero.txt] [--seed S]\n";
+            cerr << "Uso: ./prog [--n N] [--k K] [--txt file.txt] [--seed S] [--metric M]\n";
+            cerr << "Máximo N=" << MAX_N << "\n";
             return 0;
         }
-        else if (a == "--metric") metric = parse_metric(next());
     }
 
-    // Generar universo U = {1, 2, ..., n}
-    set<int> U;
-    for (int i = 1; i <= n; i++) {
-        U.insert(i);
+    if (n > MAX_N) {
+        cerr << "ERROR: n=" << n << " excede MAX_N=" << MAX_N << "\n";
+        return 1;
     }
-    
-    // Generar familia F de subconjuntos aleatorios
-    int num_subconjuntos = n;  // Número de subconjuntos en F
-    int tam_min = max(1, n/10);           // Tamaño mínimo de cada subconjunto
-    int tam_max = n / 3;       // Tamaño máximo de cada subconjunto
-    vector<set<int>> F = generar_F(U, num_subconjuntos, tam_min, tam_max, seed);
-    
-    // Generar conjunto objetivo G
-    set<int> G = generar_G(U, n/2, seed + 1);
-    
-    // ---- Ejecutar para este k (una vez) ----
-    auto t0 = chrono::high_resolution_clock::now();
-    auto expresion = exhaustive_search(F, U, G, k);
-    auto resultado = evaluar_subconjuntos(expresion, G, U, k, metric);
-    auto t1 = chrono::high_resolution_clock::now();
-    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
 
-    const string& e_best = resultado.expr_str;
-    const set<int>& G_best = resultado.conjunto;
+    // Generar universo U como bitset con primeros n bits en 1
+    Bitset U;
+    for (int i = 0; i < n; i++) U[i] = 1;
+    
+    // Generar F y G
+    int num_subconjuntos = n;
+    int tam_min = max(1, n/10);
+    int tam_max = max(tam_min, n/3);
+    vector<Bitset> F = generar_F(n, num_subconjuntos, tam_min, tam_max, seed);
+    Bitset G = generar_G(n, n/2, seed + 1);
+    
+    // Ejecutar búsqueda exhaustiva
+    auto t0 = high_resolution_clock::now();
+    auto expresion = exhaustive_search(F, U, n, k);
+    auto resultado = evaluar_subconjuntos(expresion, G, n, k, metric);
+    auto t1 = high_resolution_clock::now();
+    double ms = duration<double, milli>(t1 - t0).count();
 
-    // ---- SALIDA TXT (si se indica) o stdout ----
-    double best_score = M(resultado, G, U, metric);
-
-    // Construir la línea de resultados
-    std::ostringstream line;
-    line.setf(std::ios::fixed);
-    line << std::setprecision(3);
+    // SALIDA
+    ostringstream line;
+    line.setf(ios::fixed);
+    line << setprecision(3);
     line << "n=" << n
-        << "  k=" << k
-        << "  |F|=" << F.size()
-        << "  F=" << family_to_str(F)
-        << "  |G|=" << G.size()
-        << "  G=" << set_to_str(G)
-        << "  time_ms=" << ms
-        << "  metric=" << metric_name(metric)
-        << "  best_score=" << std::setprecision(3) << best_score
-        << "  best_expr=" << e_best
-        << "  best_set=" << set_to_str(G_best)
-        << "\n"; 
+         << "  k=" << k
+         << "  |F|=" << F.size();
+    
+    if (n <= 20) {
+        line << "  F=" << family_to_str(F, n)
+             << "  |G|=" << G.count()
+             << "  G=" << bitset_to_str(G, n);
+    }
+    
+    line << "  time_ms=" << ms
+         << "  metric=" << metric_name(metric)
+         << "  best_score=" << M(resultado.conjunto, G, n, metric)
+         << "  best_expr=" << resultado.expr_str;
+    
+    if (n <= 30) {
+        line << "  best_set=" << bitset_to_str(resultado.conjunto, n);
+    }
+    
+    line << "\n";
 
-    // Si se pasa --txt, añadir al archivo
-    if (!txt_file.empty()) {  
-        std::ofstream f(txt_file, std::ios::app);
+    if (!txt_file.empty()) {
+        ofstream f(txt_file, ios::app);
         if (!f) {
-            std::cerr << "ERROR: no se pudo abrir " << txt_file << " para escribir.\n";
+            cerr << "ERROR: no se pudo abrir " << txt_file << "\n";
             return 1;
         }
         f << line.str();
     } else {
-        // Si no se pasa, imprimir por pantalla
-        std::cout << line.str();
+        cout << line.str();
     }
 
     return 0;
-
 }
