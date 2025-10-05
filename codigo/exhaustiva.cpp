@@ -10,19 +10,20 @@
 #include <filesystem>  // C++17
 #include <iomanip>
 #include <regex>
-#include <unordered_set>
 #include <cmath>
 
 using namespace std;
 using namespace chrono;
 
-enum class Metric { JACCARD, PRECISION, SIZE };
+enum class Metric { JACCARD, PRECISION, SIZE, F1, ERROR };
 
 static Metric parse_metric(std::string s) {
     for (auto& c : s) c = std::tolower(c);
     if (s == "jaccard") return Metric::JACCARD;
     if (s == "precision") return Metric::PRECISION;
     if (s == "size" || s == "|a|" || s == "tam") return Metric::SIZE;
+    if (s == "f1") return Metric::F1;
+    if (s == "error" || s == "err") return Metric::ERROR;
     return Metric::JACCARD; // por defecto
 }
 
@@ -53,6 +54,8 @@ static const char* metric_name(Metric m) {
         case Metric::JACCARD: return "jaccard";
         case Metric::PRECISION:  return "precision";
         case Metric::SIZE:    return "size";
+        case Metric::F1: return "f1";
+        case Metric::ERROR: return "error";
     }
     return "unknown";
 }
@@ -158,7 +161,7 @@ set<int> set_difference(const set<int>& A, const set<int>& B) {
 // Función de medida - IMPLEMENTAR LA QUE QUERAMOS
 double M(const Expression& e, const std::set<int>& G, const std::set<int>& U, Metric metric) {
     const Confusion c = compute_confusion(e.conjunto, G, U);
-    const double TP = c.TP, FP = c.FP, FN = c.FN;
+    const double TP = c.TP, FP = c.FP, FN = c.FN, TN = c.TN;
 
     switch (metric) {
         case Metric::JACCARD:
@@ -167,7 +170,14 @@ double M(const Expression& e, const std::set<int>& G, const std::set<int>& U, Me
             return safe_div(TP, TP + FP);                // |A∩G| / |G|
         case Metric::SIZE:
             return -static_cast<double>(set_difference(G, e.conjunto).size());       // minimizar |G\A| -> maximizamos -|G\A|
-    }
+        case Metric::F1: {
+            double prec = safe_div(double(TP), double(TP) + double(FP));
+            double rec = safe_div(double(TP), double(TP) + double(FN));
+            return safe_div(2.0 * prec * rec, prec + rec);
+        }
+        case Metric::ERROR:
+            return safe_div(FP + FN, U.size());        // (|A∩G| + |A^c ∩ G^c|) / |U|
+     }
     return 0.0;
 }
 
@@ -176,8 +186,7 @@ vector<vector<Expression>> exhaustive_search(
     const vector<set<int>>& F,  // Familia de subconjuntos
     const set<int>& U,           // Universo
     const set<int>& G,           // Conjunto objetivo
-    int k,                       // Máximo de operaciones
-    Metric metric = Metric::JACCARD // Métrica a optimizar
+    int k                       // Máximo de operaciones
     )
 {
     // Inicializar expr[s] para s = 0 hasta k
@@ -233,7 +242,7 @@ vector<vector<Expression>> exhaustive_search(
     return expr;
 }
 
-pair<Expression, set<int>> evaluar_subconjuntos(const vector<vector<Expression>>& expr, 
+Expression evaluar_subconjuntos(const vector<vector<Expression>>& expr, 
                                                  const set<int>& G, 
                                                  const set<int>& U, 
                                                  int k, 
@@ -253,7 +262,7 @@ pair<Expression, set<int>> evaluar_subconjuntos(const vector<vector<Expression>>
         }
     }
         
-    return make_pair(e_best, e_best.conjunto);
+    return e_best;
 }
 
 
@@ -297,16 +306,16 @@ int main(int argc, char* argv[]) {
     
     // ---- Ejecutar para este k (una vez) ----
     auto t0 = chrono::high_resolution_clock::now();
-    auto expresion = exhaustive_search(F, U, G, k, metric);
+    auto expresion = exhaustive_search(F, U, G, k);
     auto resultado = evaluar_subconjuntos(expresion, G, U, k, metric);
     auto t1 = chrono::high_resolution_clock::now();
     double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
 
-    const Expression& e_best = resultado.first;
-    const set<int>& G_best = resultado.second;
+    const string& e_best = resultado.expr_str;
+    const set<int>& G_best = resultado.conjunto;
 
     // ---- SALIDA TXT (si se indica) o stdout ----
-    double best_score = M(e_best, G, U, metric);
+    double best_score = M(resultado, G, U, metric);
 
     // Construir la línea de resultados
     std::ostringstream line;
@@ -321,7 +330,7 @@ int main(int argc, char* argv[]) {
         << "  time_ms=" << ms
         << "  metric=" << metric_name(metric)
         << "  best_score=" << std::setprecision(3) << best_score
-        << "  best_expr=" << e_best.expr_str
+        << "  best_expr=" << e_best
         << "  best_set=" << set_to_str(G_best)
         << "\n"; 
 
