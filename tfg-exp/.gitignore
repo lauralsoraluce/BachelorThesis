@@ -1,0 +1,6 @@
+*.o
+/build/
+results/
+logs/
+*.csv
+*.json

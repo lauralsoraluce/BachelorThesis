@@ -1,0 +1,36 @@
+# --- Núcleo del dominio ---
+U_size: 128   # usamos bitsets de 128
+
+small_config:
+  G_size_min: 10
+  F_n_min: 5
+  F_n_max: 30
+  Fi_size_min: 5
+  Fi_size_max: 50
+  k: 3
+  seeds: [1002, 1003, 1004, 1005]
+  instances: 4
+  timeouts:
+    exhaustive_sec: 60
+    greedy_sec: 30
+    ga_default_sec: 150
+
+
+batch_config:
+  G_size_min: 10
+  F_n_min: 5
+  F_n_max: 100
+  Fi_size_min: 5
+  Fi_size_max: 100
+  k: 5
+  seed_start: 2001
+  instances: 50
+  timeouts:
+    greedy_sec: 30
+    ga_default_sec: 300
+
+# --- Rutas ---
+paths:
+  results_small: "results/small"
+  results_batch: "results/batch"
+  logs: "logs"
