@@ -29,7 +29,7 @@ static std::vector<T> unique_by_H(const std::vector<T>& v) {
 }
 
 // ------------ árbol binario aleatorio (≤ k ops) ------------
-static Expression build_random_expr(const std::vector<int>& conjs, const std::vector<Bitset>& F, int k, std::mt19937& rng){
+Expression build_random_expr(const std::vector<int>& conjs, const std::vector<Bitset>& F, int k, std::mt19937& rng){
     if (conjs.empty()) return Expression(Bitset(), "∅", {}, 0);
     if (conjs.size() == 1) {
         int idx = conjs[0];

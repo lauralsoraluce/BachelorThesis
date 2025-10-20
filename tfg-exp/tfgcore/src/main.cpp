@@ -10,6 +10,7 @@
 #include "greedy.hpp"
 #include "genetico.hpp"
 #include "spea2.hpp"
+#include "ground_truth.hpp"
 
 using namespace std;
 
@@ -29,98 +30,72 @@ inline std::vector<SolMO> individuos_a_solmos(const std::vector<Individuo>& v) {
     return r;
 }
 
-int main(int argc, char* argv[]) {
-    // ======= EXPERIMENTO EN LOTE: SOLO GENÉTICO (NSGA-II) =======
-    // --- configuración “grande” (ajusta a tu gusto) ---
-    int n = U_size;
-    int G_size_min   = 10;
-    int F_n_min      = 10;
-    int F_n_max      = 100;
-    int Fi_size_min  = 5;
-    int Fi_size_max  = 100;
 
-    
-    std::vector<int> seeds   = {2001, 2002, 2003};   // 4–5 seeds
-    std::vector<int> ks      = {10};                        // distintos k
-    std::vector<int> budgets = {600};                       // p.ej. 2min y 5min
-
-    int pop_size        = 600;   // para k grandes, poblaciones >400 suelen ir mejor
-    double pm           = 0.6;   // mutation_prob
-    double pc           = 0.8;   // crossover_prob
-    int tournament_k    = 2;
-    int max_generations = 1e9;   // límite real = tiempo
-
-    // cabecera general
-    std::cout << "=== BATCH: SOLO GENETICO (NSGA-II) ===\n"
-              << "U=" << n
-              << " | F_n in [" << F_n_min << "," << F_n_max << "]"
-              << " | |Fi| in [" << Fi_size_min << "," << Fi_size_max << "]\n\n";
-
-    for (int seed : seeds) {
-        // 1) Generar UNA instancia por seed (misma G y F para todos los k y tiempos)
-        Bitset U;
-        for (int i = 0; i < n; ++i) U[i] = 1;
-
-        Bitset G = generar_G(U.size(), G_size_min, seed);
-        std::vector<Bitset> F = generar_F(U.size(), F_n_min, F_n_max, Fi_size_min, Fi_size_max, seed);
-
-        std::cout << "---- SEED " << seed
-                  << " | |G|=" << G.count()
-                  << " | |F|=" << F.size() << " ----\n";
-
-        for (int k : ks) {
-            for (int tsec : budgets) {
-                // 2) Parametrizar GA (semilla reproducible por (seed,k,t))
-                GAParams params;
-                params.population_size = pop_size;
-                params.mutation_prob   = pm;
-                params.crossover_prob  = pc;
-                params.tournament_size = tournament_k;
-                params.max_generations = max_generations;
-                params.time_limit_sec  = tsec;
-                // mezcla simple y reproducible
-                params.seed = (static_cast<uint64_t>(seed) << 32)
-                            ^ static_cast<uint64_t>(k * 1009)
-                            ^ static_cast<uint64_t>(tsec * 7919);
-
-                std::cout << "  [RUN] k=" << k
-                          << " | t=" << tsec << "s"
-                          << " | pop=" << pop_size
-                          << " | pm=" << pm
-                          << " | pc=" << pc
-                          << " | rng=" << params.seed << "\n";
-
-                auto t0 = std::chrono::high_resolution_clock::now();
-                std::vector<Individuo> pareto_inds = nsga2(F, G, k, params);
-                auto t1 = std::chrono::high_resolution_clock::now();
-                auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
-
-                // resumen de resultados
-                
-                auto a_solmo = [&](const std::vector<Individuo>& v){
-                    std::vector<SolMO> r; r.reserve(v.size());
-                    for (const auto& x : v) r.emplace_back(x.expr, x.n_ops, x.sizeH, x.jaccard);
-                    return r;
-                };
-                auto soluciones = a_solmo(pareto_inds);
-
-                // métrica rápida: mejor Jaccard del frente
-                double bestJ = 0.0;
-                for (const auto& s : soluciones) bestJ = std::max(bestJ, s.jaccard);
-
-                std::cout << "    -> tiempo=" << ms << "ms"
-                          << " | |Pareto|=" << soluciones.size()
-                          << " | bestJ=" << bestJ << "\n";
-
-                
-                print_pareto_front(soluciones);
-            }
+static void print_set_indices(const Bitset& B, int U=128, int max_show=40) {
+    int shown = 0;
+    for (int i = 0; i < U; ++i) {
+        if (B[i]) {
+            cout << i << ",";
+            if (++shown >= max_show) { cout << " ..."; break; }
+            cout << " ";
         }
-        std::cout << std::endl;
+    }
+    cout << "\n";
+}
+
+int main(int argc, char** argv) {
+    bool modo_test = false;
+    int seed_expr = 20251019;
+    if (argc >= 2) {
+        string arg1 = argv[1];
+        std::transform(arg1.begin(), arg1.end(), arg1.begin(), ::toupper);
+        if (arg1 == "TRUE" || arg1 == "1" || arg1 == "ON") modo_test = true;
+    }
+    if (argc >= 3) {
+        seed_expr = std::stoi(argv[2]);
     }
 
-    // salir aquí para no ejecutar el resto del main
+    if (!modo_test){
+        auto gt = make_groundtruth(128, 5, 100, 5, 100, 10, 123, 20251019);
+
+        cout << "=== INSTANCIA ===\n";
+        cout << "Semilla: " << seed_expr << "\n";
+        cout << "U_size: 128\n";
+        cout << "F_count: " << gt.F.size() << "\n";
+        cout << "k: 10\n";
+        cout << "Expresion_oro: " << gt.gold_expr.expr_str << "\n";
+        cout << "Jaccard_objetivo: " << M(gt.gold_expr, gt.G, Metric::Jaccard) << "\n";
+        cout << "G_indices: ";
+        print_set_indices(gt.G, 128, 64);
+        cout << "\n";
+
+        GAParams ga_params;
+        ga_params.population_size   = 600;
+        ga_params.max_generations   = 1e9;
+        ga_params.time_limit_sec    = 600;
+        ga_params.crossover_prob    = 0.8;
+        ga_params.mutation_prob     = 0.6;
+        ga_params.tournament_size   = 2;
+        ga_params.seed              = 0;
+
+        auto t0 = chrono::steady_clock::now();
+        auto pareto = nsga2(gt.F, gt.G, 10, ga_params);
+        auto t1 = chrono::steady_clock::now();
+        auto dur_ms = chrono::duration_cast<chrono::milliseconds>(t1 - t0).count();
+
+        cout << "=== GENÉTICO (NSGA-II) ===\n";
+        cout << "Tiempo (ms): " << dur_ms << "\n";
+        cout << "Población: " << ga_params.population_size
+                << " | Limite_tiempo_s: " << ga_params.time_limit_sec
+                << " | p_mut: " << ga_params.mutation_prob
+                << " | p_cruce: " << ga_params.crossover_prob
+                << " | torneo: " << ga_params.tournament_size << "\n\n"; 
+
+        print_pareto_front(pareto);
+        bool hit = any_of(pareto.begin(), pareto.end(), [](const auto& s) {
+            return s.jaccard == 1.0; });
+        cout << "HIT_OBJETIVO: " << (hit ? "SI" : "NO") << "\n";
+    }
     return 0;
-// ======= FIN EXPERIMENTO EN LOTE =======
 
 }

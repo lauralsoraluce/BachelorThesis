@@ -25,6 +25,12 @@ std::vector<Individuo> nsga2(
     int k,
     const GAParams& params);
 
+Expression build_random_expr(
+    const std::vector<int>& available_sets,
+    const std::vector<Bitset>& F,
+    int k,
+    std::mt19937& rng);
+
 // Funciones auxiliares para NSGA-II
 std::vector<std::vector<Individuo>> fast_non_dominated_sort(std::vector<Individuo>& poblacion);
 void calcular_crowding_distance(std::vector<Individuo>& frente);
