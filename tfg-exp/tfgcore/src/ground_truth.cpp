@@ -18,7 +18,7 @@
 
 using namespace std;
 
-GroundTruthInstance make_groundtruth(int n, int n_min, int n_max,
+GroundTruthInstance make_groundtruth(const Bitset& U, int n, int n_min, int n_max,
                                      int tam_min, int tam_max,
                                      int k, uint64_t seed_F)
 {
@@ -30,7 +30,7 @@ GroundTruthInstance make_groundtruth(int n, int n_min, int n_max,
     vector<int> indices(F.size());
     iota(indices.begin(), indices.end(), 0);
 
-    Expression gold = build_random_expr(indices, F, k, rng);
+    Expression gold = build_random_expr(indices, F, U, k, rng);
 
     // 3. G es el resultado de evaluar esa expresión
     Bitset G = gold.conjunto;

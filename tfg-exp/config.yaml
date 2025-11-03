@@ -4,7 +4,7 @@ U_size: 128   # usamos bitsets de 128
 small_config:
   G_size_min: 10
   F_n_min: 5
-  F_n_max: 30
+  F_n_max: 20
   Fi_size_min: 5
   Fi_size_max: 50
   k: 3
@@ -19,15 +19,15 @@ small_config:
 batch_config:
   G_size_min: 10
   F_n_min: 5
-  F_n_max: 100
+  F_n_max: 80
   Fi_size_min: 5
   Fi_size_max: 100
-  k: 5
+  k: 10
   seed_start: 2001
   instances: 50
   timeouts:
     greedy_sec: 30
-    ga_default_sec: 300
+    ga_default_sec: 600
 
 # --- Rutas ---
 paths:

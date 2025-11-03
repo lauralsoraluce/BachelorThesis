@@ -17,28 +17,35 @@
 using namespace std;
 
 /* BÚSQUEDA EXHAUSTIVA */
-vector<vector<Expression>> exhaustive_search(
+vector<SolMO> exhaustive_search(
     const vector<Bitset>& F,
     const Bitset& U,
+    const Bitset& G,
     int k)
 {
     vector<vector<Expression>> expr(k + 1);
-    
-    // Nivel 0: conjuntos base + U
-    expr[0].reserve(F.size() + 2);
-    for (size_t i = 0; i < F.size(); i++) {
-        set<int> sets = {static_cast<int>(i)};
-        expr[0].emplace_back(F[i], "F" + to_string(i), sets, 0);
-    }
-    set<int> u_set = {-1};
-    expr[0].emplace_back(U, "U", u_set, 0);
+    vector<SolMO> soluciones;
 
-    // Para evitar duplicados de conjuntos generados
-    /*unordered_set<string> seen_sets;
-    for (const auto& e : expr[0]) {
-        seen_sets.insert(e.conjunto.to_string());
-    }*/
-    
+    // Nivel 0: conjuntos base + U + vacío
+    expr[0].reserve(F.size() + 1);
+
+    for (int i = -1; i < (int)F.size(); i++) {
+        if (i==-1) {
+            set<int> u_set ={};
+            expr[0].emplace_back(U, "U", u_set, 0);
+        }
+        else {
+            set<int> sets = {i};
+            expr[0].emplace_back(F[i], "F" + to_string(i), sets, 0);
+        }
+
+        const Expression& e = expr[0].back();
+        double j = M(e, G, Metric::Jaccard);
+        int sizeH = M(e, G, Metric::SizeH);
+        int n_ops = M(e, G, Metric::OpSize); // n_ops == 0
+        soluciones.emplace_back(e, n_ops, sizeH, j);
+    }
+
     // Generar expresiones con s operaciones (1...k)
     for (int s = 1; s <= k; s++) {
         for (int op = 0; op < 3; op++) {
@@ -63,12 +70,6 @@ vector<vector<Expression>> exhaustive_search(
                                                right.conjunto);
                         }
                         
-                        // Evitamos duplicados
-                        string set_str = new_set.to_string();
-                        /*if (seen_sets.count(set_str)) continue;
-                        seen_sets.insert(set_str);*/
-                        
-                        // Construimos expresión
                         string new_expr = "(" + left.expr_str + op_str + 
                                          right.expr_str + ")";
                         
@@ -76,17 +77,18 @@ vector<vector<Expression>> exhaustive_search(
                         combined_sets.insert(right.used_sets.begin(), right.used_sets.end());
                         
                         expr[s].emplace_back(new_set, new_expr, combined_sets, s);
+
+                        const Expression& e_nueva = expr[s].back();
+                        double j = M(e_nueva, G, Metric::Jaccard);
+                        int sizeH = M(e_nueva, G, Metric::SizeH);
+                        soluciones.emplace_back(e_nueva, s, sizeH, j);
                     }
                 }
             }
         }
     }
     
-    // Añadimos conjunto vacío a expr[0]
-    set<int> empty_sets;
-    expr[0].emplace_back(Bitset(), "∅", empty_sets, 0);
-    
-    return expr;
+    return pareto_front(soluciones);
 }
 
 //------------------------------------------------------------------

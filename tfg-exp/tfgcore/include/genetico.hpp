@@ -32,16 +32,24 @@ struct GAParams {
 //------------------------------------------------------------------
 std::vector<Individuo> nsga2(
     const std::vector<Bitset>& F,
+    const Bitset& U,
     const Bitset& G,
     int k,
     const GAParams& params);
 
+std::vector<Individuo> nsga2_parada(
+    const vector<Bitset>& F,
+    const Bitset& U,
+    const Bitset& G,
+    int k,
+    const GAParams& params);
 //------------------------------------------------------------------
 // Construcción aleatoria de expresiones (individuos)
 //------------------------------------------------------------------
 Expression build_random_expr(
     const std::vector<int>& available_sets,
     const std::vector<Bitset>& F,
+    const Bitset& U,
     int k,
     std::mt19937& rng);
 
@@ -51,10 +59,12 @@ Expression build_random_expr(
 std::vector<std::vector<Individuo>> fast_non_dominated_sort(std::vector<Individuo>& poblacion);
 void calcular_crowding_distance(std::vector<Individuo>& frente);
 Individuo torneo_seleccion(const std::vector<Individuo>& poblacion, int tournament_size, std::mt19937& rng);
-Individuo crossover(const Individuo& padre1, const Individuo& padre2, 
-                   const std::vector<Bitset>& F, int k, std::mt19937& rng);
-void mutar(Individuo& individuo, const std::vector<Bitset>& F, int k, std::mt19937& rng);
-std::vector<Individuo> inicializar_poblacion(const std::vector<Bitset>& F, const Bitset& G, int k, int pop_size, std::mt19937& rng);
+Individuo crossover(const Individuo& p1, const Individuo& p2,
+                    const vector<Bitset>& F, const Bitset& U, const Bitset& G,
+                    int k, mt19937& rng);
+void mutar(Individuo& individuo, const std::vector<Bitset>& F, const Bitset& U, const Bitset& G, int k, std::mt19937& rng, const vector<SolMO>& bloques_base);
+std::vector<Individuo> inicializar_poblacion(const vector<Bitset>& F, const Bitset& U,
+                                        const Bitset& G, int k, int pop_size, mt19937& rng);
 Expression build_random_expr_v2(const vector<int>& conjs, const vector<Bitset>& F, int k, mt19937& rng);
 Individuo crossover_v2(const Individuo& p1, const Individuo& p2,
                        const vector<Bitset>& F, int k, mt19937& rng);

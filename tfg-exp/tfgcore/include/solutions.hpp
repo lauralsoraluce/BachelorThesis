@@ -59,21 +59,77 @@ inline bool dominates(const SolMO& a, const SolMO& b) {
 //------------------------------------------------------------------
 template<typename T>
 std::vector<T> pareto_front_generic(const std::vector<T>& v) {
+    // if (v.empty()) return {};
+    
+    // std::vector<T> nd;
+    // nd.reserve(v.size());
+    
+    // for (const auto& sol : v) {
+    //     bool is_dominated = false;
+    //     for (const auto& other : v) {
+    //         if (&sol == &other) continue;
+    //         if (dominates(other, sol)) {
+    //             is_dominated = true;
+    //             break;
+    //         }
+    //     }
+    //     if (!is_dominated) {
+    //         nd.push_back(sol);
+    //     }
+    // }
+    
+    // std::stable_sort(nd.begin(), nd.end(), [](const T& a, const T& b) {
+    //     if (a.jaccard != b.jaccard) return a.jaccard > b.jaccard; // descendiente
+    //     if (a.sizeH != b.sizeH) return a.sizeH < b.sizeH; // ascendiente
+    //     return a.n_ops < b.n_ops; // ascendiente
+    // });
+
     if (v.empty()) return {};
     
-    std::vector<T> nd;
-    nd.reserve(v.size());
+    std::vector<T> nd; // El frente no dominado
     
-    for (const auto& sol : v) {
-        bool is_dominated = false;
-        for (const auto& other : v) {
-            if (&sol == &other) continue;
+    // Reserva espacio (opcional, pero puede ayudar)
+    // Asumimos que el frente será mucho más pequeño que v
+    nd.reserve(v.size() / 10 + 1); 
+
+    for (const auto& sol : v) { // Bucle externo: O(N)
+        bool sol_is_dominated = false;
+        
+        // Iteramos sobre el frente 'nd' actual usando un índice
+        // (Necesario porque podemos eliminar elementos)
+        int i = 0;
+        while (i < nd.size()) { // Bucle interno: O(M)
+            
+            const auto& other = nd[i];
+
             if (dominates(other, sol)) {
-                is_dominated = true;
+                // 'other' (en el frente) domina a 'sol'.
+                // 'sol' es inútil, dejamos de comprobar.
+                sol_is_dominated = true;
                 break;
             }
+            
+            if (dominates(sol, other)) {
+                // 'sol' domina a 'other' (que estaba en el frente).
+                // Eliminamos 'other' del frente.
+                
+                // Técnica "swap-and-pop": O(1) para eliminar
+                // (rompe el orden, pero lo arreglamos al final)
+                nd[i] = nd.back();
+                nd.pop_back();
+                
+                // NO incrementamos 'i', porque necesitamos comprobar
+                // el nuevo elemento que acabamos de mover a 'nd[i]'.
+            } else {
+                // Ni 'sol' domina 'other', ni 'other' domina 'sol'.
+                // Pasamos al siguiente elemento del frente.
+                i++;
+            }
         }
-        if (!is_dominated) {
+
+        // Si 'sol' no fue dominado por nadie del frente actual,
+        // entonces 'sol' pertenece al frente.
+        if (!sol_is_dominated) {
             nd.push_back(sol);
         }
     }

@@ -8,6 +8,7 @@
 #include "genetico.hpp"
 #include "metrics.hpp"
 
+#include<iomanip>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -40,15 +41,28 @@ static vector<T> unique_by_H(const vector<T>& v) {
 //------------------------------------------------------------------
 // Árbol binario aleatorio (≤ k operaciones)
 //------------------------------------------------------------------
-Expression build_random_expr(const vector<int>& conjs, const vector<Bitset>& F, int k, mt19937& rng){
-    if (conjs.empty()) return Expression(Bitset(), "∅", {}, 0);
-    if (conjs.size() == 1) {
-        int idx = conjs[0];
-        return Expression(F[idx], "F"+to_string(idx), {idx}, 0);
-    }
+Expression build_random_expr(const vector<int>& conjs, const vector<Bitset>& F, const Bitset& U, int k, mt19937& rng){
     struct Node{ Expression e; };
-    vector<Node> pool; pool.reserve(conjs.size());
-    for (int idx : conjs) pool.push_back({ Expression(F[idx], "F"+to_string(idx), {idx}, 0) });
+    vector<Node> pool; 
+    pool.reserve(conjs.size());
+
+    for (int idx : conjs) {
+        if (idx == -1){
+            set<int> u_set = {};
+            pool.push_back({Expression(U, "U", u_set, 0)});
+        }
+        /*else if (idx==-2) {
+            set<int> empty_set = {};
+            pool.push_back({Expression(Bitset(), "∅", empty_set, 0)});
+        }*/
+        else if (idx>=0){
+            set<int> f_set = {idx};
+            pool.push_back({Expression(F[idx], "F"+to_string(idx),f_set,0)});
+        }
+    }
+
+    if (pool.empty()) return Expression(Bitset(), "∅", {}, 0);
+    if (pool.size()==1) return pool.front().e;
 
     int intentos_fallidos = 0;
     const int max_intentos = 100;
@@ -86,6 +100,7 @@ Expression build_random_expr(const vector<int>& conjs, const vector<Bitset>& F, 
 // ============================================================================
 vector<Individuo> nsga2(
     const vector<Bitset>& F,
+    const Bitset& U,
     const Bitset& G,
     int k,
     const GAParams& params)
@@ -99,8 +114,24 @@ vector<Individuo> nsga2(
     auto start_time = chrono::steady_clock::now();
     auto time_limit = chrono::seconds(params.time_limit_sec);
 
+    vector<SolMO> bloques_base;
+    {
+        for (size_t i = 0; i < F.size(); i++) {
+            set<int> s = {(int)i}; 
+            Expression e(F[i], "F"+to_string(i), s, 0);
+            bloques_base.emplace_back(e, 0, M(e,G,Metric::SizeH), M(e,G,Metric::Jaccard));
+        }
+        set<int> s_u = {-1}; 
+        Expression e_u(U, "U", s_u, 0);
+        bloques_base.emplace_back(e_u, 0, M(e_u,G,Metric::SizeH), M(e_u,G,Metric::Jaccard));
+        set<int> s_e = {-2}; // Asegúrate de que ∅ use -2
+        Expression e_e(Bitset(), "∅", s_e, 0);
+        bloques_base.emplace_back(e_e, 0, M(e_e,G,Metric::SizeH), M(e_e,G,Metric::Jaccard));
+    }
+
     // 1) Población inicial
-    vector<Individuo> poblacion = inicializar_poblacion(F, G, k, params.population_size, rng);
+    vector<Individuo> poblacion = inicializar_poblacion(F, U, G, k, params.population_size, rng);
+    
     Individuo mejor_global = poblacion[0];
     for (const auto& ind : poblacion) {
         if (ind.jaccard > mejor_global.jaccard) mejor_global = ind;
@@ -112,7 +143,7 @@ vector<Individuo> nsga2(
         if (chrono::steady_clock::now() - start_time >= time_limit) {
             break;
         }
-        if (mejor_global.jaccard >= 0.99999) break;
+        //if (mejor_global.jaccard >= 0.99999) break;
 
         // 2) Offspring con anti-duplicados por estructura
         vector<Individuo> offspring;
@@ -128,18 +159,14 @@ vector<Individuo> nsga2(
 
             Individuo hijo;
             if (uniform_real_distribution<>(0,1)(rng) < params.crossover_prob) {
-                hijo = crossover(p1, p2, F, k, rng);
+                hijo = crossover(p1, p2, F, U, G, k, rng);
             } else {
                 hijo = (uniform_int_distribution<>(0,1)(rng) == 0) ? p1 : p2;
             }
 
             if (uniform_real_distribution<>(0,1)(rng) < params.mutation_prob) {
-                mutar(hijo, F, k, rng);
+                mutar(hijo, F, U, G, k, rng, bloques_base);
             }
-
-            hijo.jaccard = M(hijo.expr, G, Metric::Jaccard);
-            hijo.sizeH   = (int)M(hijo.expr, G, Metric::SizeH);
-            hijo.n_ops   = hijo.expr.n_ops;
 
             if (seen_gen.insert(key_of_expr(hijo.expr)).second) {
                 offspring.push_back(move(hijo));
@@ -186,8 +213,127 @@ vector<Individuo> nsga2(
         generation++;
     }
 
-    auto pareto = pareto_front(poblacion);
-    return unique_by_H(pareto);
+    // auto pareto = pareto_front(poblacion);
+    return pareto_front(poblacion);
+}
+
+vector<Individuo> nsga2_parada(
+    const vector<Bitset>& F,
+    const Bitset& U,
+    const Bitset& G,
+    int k,
+    const GAParams& params)
+{
+    // Semilla: si es 0, usar tiempo actual (para que sea no determinista)
+    uint64_t seed = params.seed 
+        ? params.seed 
+        : (uint64_t)chrono::high_resolution_clock::now().time_since_epoch().count();
+    mt19937 rng(seed);
+
+    auto start_time = chrono::steady_clock::now();
+    auto time_limit = chrono::seconds(params.time_limit_sec);
+
+    vector<SolMO> bloques_base;
+    {
+        for (size_t i = 0; i < F.size(); i++) {
+            set<int> s = {(int)i}; 
+            Expression e(F[i], "F"+to_string(i), s, 0);
+            bloques_base.emplace_back(e, 0, M(e,G,Metric::SizeH), M(e,G,Metric::Jaccard));
+        }
+        set<int> s_u = {-1}; 
+        Expression e_u(U, "U", s_u, 0);
+        bloques_base.emplace_back(e_u, 0, M(e_u,G,Metric::SizeH), M(e_u,G,Metric::Jaccard));
+        set<int> s_e = {-2}; // Asegúrate de que ∅ use -2
+        Expression e_e(Bitset(), "∅", s_e, 0);
+        bloques_base.emplace_back(e_e, 0, M(e_e,G,Metric::SizeH), M(e_e,G,Metric::Jaccard));
+    }
+
+    // 1) Población inicial
+    vector<Individuo> poblacion = inicializar_poblacion(F, U, G, k, params.population_size, rng);
+    
+    Individuo mejor_global = poblacion[0];
+    for (const auto& ind : poblacion) {
+        if (ind.jaccard > mejor_global.jaccard) mejor_global = ind;
+    }
+
+    int generation = 0;
+    while (generation < params.max_generations) {
+        // Límite de tiempo
+        if (chrono::steady_clock::now() - start_time >= time_limit) {
+            break;
+        }
+        if (mejor_global.jaccard >= 0.99999) break;
+
+        // 2) Offspring con anti-duplicados por estructura
+        vector<Individuo> offspring;
+        offspring.reserve(params.population_size);
+        
+        unordered_set<string> seen_gen;
+        seen_gen.reserve(params.population_size * 2);
+        for (const auto& ind : poblacion) seen_gen.insert(key_of_expr(ind.expr));
+
+        while ((int)offspring.size() < params.population_size) {
+            Individuo p1 = torneo_seleccion(poblacion, params.tournament_size, rng);
+            Individuo p2 = torneo_seleccion(poblacion, params.tournament_size, rng);
+
+            Individuo hijo;
+            if (uniform_real_distribution<>(0,1)(rng) < params.crossover_prob) {
+                hijo = crossover(p1, p2, F, U, G, k, rng);
+            } else {
+                hijo = (uniform_int_distribution<>(0,1)(rng) == 0) ? p1 : p2;
+            }
+
+            if (uniform_real_distribution<>(0,1)(rng) < params.mutation_prob) {
+                mutar(hijo, F, U, G, k, rng, bloques_base);
+            }
+
+            if (seen_gen.insert(key_of_expr(hijo.expr)).second) {
+                offspring.push_back(move(hijo));
+            }
+        }
+
+        // 3) Combinación
+        vector<Individuo> R = poblacion;
+        R.insert(R.end(), offspring.begin(), offspring.end());
+
+        // 4) NSGA-II: frentes + crowding
+        auto Flist = fast_non_dominated_sort(R);
+
+        // 5) Nueva población
+        vector<Individuo> Pnext;
+        Pnext.reserve(params.population_size);
+
+        for (auto& Fi : Flist) {
+            if (Fi.empty()) continue;
+            
+            calcular_crowding_distance(Fi);
+            
+            if (Pnext.size() + Fi.size() <= (size_t)params.population_size) {
+                Pnext.insert(Pnext.end(), Fi.begin(), Fi.end());
+            } else {
+                // Ordenar por crowding distance descendente
+                sort(Fi.begin(), Fi.end(),
+                    [](const Individuo& a, const Individuo& b) {
+                        if (isinf(a.crowd) && !isinf(b.crowd)) return true;
+                        if (!isinf(a.crowd) && isinf(b.crowd)) return false;
+                        return a.crowd > b.crowd;
+                    });
+                size_t need = params.population_size - Pnext.size();
+                Pnext.insert(Pnext.end(), Fi.begin(), Fi.begin() + need);
+                break;
+            }
+        }
+
+        for (const auto& ind : Pnext) {
+            if (ind.jaccard > mejor_global.jaccard) mejor_global = ind;
+        }
+        
+        poblacion = move(Pnext);
+        generation++;
+    }
+
+    // auto pareto = pareto_front(poblacion);
+    return pareto_front(poblacion);
 }
 
 // ============================================================================
@@ -196,52 +342,67 @@ vector<Individuo> nsga2(
 vector<vector<Individuo>> fast_non_dominated_sort(vector<Individuo>& poblacion) {
     int n = (int)poblacion.size();
     vector<int> domination_count(n, 0);
-    vector<vector<int>> dominated_set(n);
-    vector<vector<Individuo>> frentes;
+    vector<vector<int>> dominated_set(n); // Almacena ÍNDICES
+    vector<vector<int>> frentes_idx;      // Almacena ÍNDICES
 
     for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
             if (dominates(poblacion[i], poblacion[j])) {
-                dominated_set[i].push_back(j);
+                dominated_set[i].push_back(j); // i domina al índice j
                 domination_count[j]++;
             } else if (dominates(poblacion[j], poblacion[i])) {
-                dominated_set[j].push_back(i);
+                dominated_set[j].push_back(i); // j domina al índice i
                 domination_count[i]++;
             }
         }
     }
 
-    vector<Individuo> frente0;
+    vector<int> frente0_idx;
     for (int i = 0; i < n; i++) {
         if (domination_count[i] == 0) {
             poblacion[i].rank = 0;
-            frente0.push_back(poblacion[i]);
+            frente0_idx.push_back(i); // Añade el ÍNDICE i
         }
     }
-    if (!frente0.empty()) frentes.push_back(frente0);
+    if (!frente0_idx.empty()) frentes_idx.push_back(frente0_idx);
 
     int rank = 0;
-    while (rank < (int)frentes.size() && !frentes[rank].empty()) {
-        vector<Individuo> siguiente;
-        for (const auto& ind : frentes[rank]) {
-            int idx = -1;
-            for (int i = 0; i < n; i++) {
-                if (poblacion[i].expr.expr_str == ind.expr.expr_str) { idx = i; break; }
-            }
-            if (idx == -1) continue;
-
-            for (int j : dominated_set[idx]) {
-                if (--domination_count[j] == 0) {
-                    poblacion[j].rank = rank + 1;
-                    siguiente.push_back(poblacion[j]);
+    while (rank < (int)frentes_idx.size() && !frentes_idx[rank].empty()) {
+        vector<int> siguiente_idx; // Siguiente frente de ÍNDICES
+        
+        // *** ESTA ES LA PARTE CORREGIDA ***
+        // Ya no buscamos por string, solo usamos los índices
+        for (int idx : frentes_idx[rank]) { // Itera sobre los índices del frente actual
+            
+            for (int j_idx : dominated_set[idx]) { // Itera sobre los índices que 'idx' domina
+                
+                domination_count[j_idx]--;
+                if (domination_count[j_idx] == 0) {
+                    poblacion[j_idx].rank = rank + 1;
+                    siguiente_idx.push_back(j_idx);
                 }
             }
         }
-        if (siguiente.empty()) break;
-        frentes.push_back(siguiente);
+        
+        if (siguiente_idx.empty()) break;
+        frentes_idx.push_back(siguiente_idx);
         rank++;
     }
 
+    // --- CONVERSIÓN FINAL ---
+    // Ahora convertimos los frentes de índices a frentes de Individuos
+    // para que coincida con tu firma de función original
+    vector<vector<Individuo>> frentes;
+    frentes.reserve(frentes_idx.size());
+    for (const auto& frente_i : frentes_idx) {
+        vector<Individuo> frente_ind;
+        frente_ind.reserve(frente_i.size());
+        for (int idx : frente_i) {
+            frente_ind.push_back(poblacion[idx]);
+        }
+        frentes.push_back(frente_ind);
+    }
+    
     return frentes;
 }
 
@@ -251,6 +412,7 @@ vector<vector<Individuo>> fast_non_dominated_sort(vector<Individuo>& poblacion) 
 void calcular_crowding_distance(vector<Individuo>& frente) {
     int n = (int)frente.size();
     if (n == 0) return;
+
     if (n == 1) {
         frente[0].crowd = INFINITY;
         return;
@@ -309,71 +471,163 @@ Individuo torneo_seleccion(const vector<Individuo>& poblacion, int tournament_si
 }
 
 Individuo crossover(const Individuo& p1, const Individuo& p2,
-                    const vector<Bitset>& F, int k, mt19937& rng) {
-    set<int> usados;
-    for (int idx : p1.expr.used_sets) {
-        if (uniform_int_distribution<>(0,1)(rng) == 0) usados.insert(idx);
-    }
-    for (int idx : p2.expr.used_sets) {
-        if (uniform_int_distribution<>(0,1)(rng) == 0) usados.insert(idx);
-    }
+                    const vector<Bitset>& F, const Bitset& U, const Bitset& G,
+                    int k, mt19937& rng) {
+    // set<int> usados;
+    // for (int idx : p1.expr.used_sets) {
+    //     if (uniform_int_distribution<>(0,1)(rng) == 0) usados.insert(idx);
+    // }
+    // for (int idx : p2.expr.used_sets) {
+    //     if (uniform_int_distribution<>(0,1)(rng) == 0) usados.insert(idx);
+    // }
 
-    if (usados.empty()) {
-        Individuo h;
-        h.expr = Expression(Bitset(), "∅", {}, 0);
-        h.n_ops = 0;
-        h.jaccard = 0.0;
-        h.sizeH = 0;
-        return h;
-    }
+    // if (usados.empty()) {
+    //     set<int> s = {-2};
+    //     Expression e(Bitset(), "∅", s, 0);
+    //     Individuo h;
+    //     h.expr = e;
+    //     h.n_ops = 0;
+    //     h.jaccard = M(h.expr, G, Metric::Jaccard);
+    //     h.sizeH = (int)M(h.expr, G, Metric::SizeH);
+    //     return h;
+    // }
     
-    vector<int> conjs(usados.begin(), usados.end());
-    Expression e = build_random_expr(conjs, F, k, rng);
+    // vector<int> conjs(usados.begin(), usados.end());
+    // Expression e = build_random_expr(conjs, F, U, k, rng);
 
-    Individuo h;
-    h.expr = move(e);
-    h.n_ops = h.expr.n_ops;
-    return h;
+    // Individuo h;
+    // h.expr = move(e);
+
+    // h.jaccard = M(h.expr, G, Metric::Jaccard);
+    // h.sizeH = (int)M(h.expr, G, Metric::SizeH);
+    // h.n_ops = h.expr.n_ops;
+    // return h;
+
+    const Individuo* left_parent;
+    const Individuo* right_parent;
+    if (uniform_int_distribution<>(0,1)(rng)==0){
+        left_parent = &p1;
+        right_parent = &p2;
+    }
+    else {
+        left_parent = &p2;
+        right_parent = &p1;
+    }
+
+    int new_ops = left_parent->n_ops+right_parent->n_ops+1;
+    if(new_ops>k){
+        return(p1.jaccard>p2.jaccard)?p1:p2;
+    }
+
+    int op = uniform_int_distribution<>(0,2)(rng);
+    string op_str = (op == 0) ? " ∪ " : (op == 1) ? " ∩ " : " \\ ";
+
+    Bitset new_set;
+    if (op == 0) new_set = set_union(left_parent->expr.conjunto, right_parent->expr.conjunto);
+    else if (op == 1) new_set = set_intersect(left_parent->expr.conjunto, right_parent->expr.conjunto);
+    else new_set = set_difference(left_parent->expr.conjunto, right_parent->expr.conjunto);
+
+    // 4. Construir la expresión y los sets
+    string new_expr = "(" + left_parent->expr.expr_str + op_str + right_parent->expr.expr_str + ")";
+    
+    set<int> combined_sets = left_parent->expr.used_sets;
+    combined_sets.insert(right_parent->expr.used_sets.begin(), right_parent->expr.used_sets.end());
+
+    Expression e_hijo(new_set, new_expr, combined_sets, new_ops);
+    
+    // 5. Evaluar y devolver
+    double j = M(e_hijo, G, Metric::Jaccard);
+    int sizeH = M(e_hijo, G, Metric::SizeH); // Usamos la métrica corregida que ignora U/∅
+    
+    return Individuo(e_hijo, new_ops, sizeH, j);
 }
 
-void mutar(Individuo& ind, const vector<Bitset>& F, int k, mt19937& rng){
-    int tipo = uniform_int_distribution<>(0,2)(rng);
-    vector<int> conjs(ind.expr.used_sets.begin(), ind.expr.used_sets.end());
-    
+void mutar(Individuo& ind, const vector<Bitset>& F, const Bitset& U, const Bitset& G, int k, mt19937& rng, const vector<SolMO>& bloques_base)
+{
+    // Damos un 80% de probabilidad a un "ajuste fino" (crecimiento)
+    // y un 20% a una "demolición" (reconstrucción aleatoria)
+    std::uniform_real_distribution<double> dist_tipo(0.0, 1.0);
+    int tipo = (dist_tipo(rng) < 0.80) ? 1 : 0; // 80% tipo 1, 20% tipo 0
+
     if (tipo == 0) {
-        // Reorganizar conjuntos existentes
+        // --- Tipo 0: Mutación Destructiva (Exploración) ---
+        // (Esta es tu lógica original, pero ahora con U y ∅)
+        // Útil para saltar fuera de un óptimo local si nos atascamos.
+        
+        vector<int> conjs(ind.expr.used_sets.begin(), ind.expr.used_sets.end());
+        
+        // Rango de índices completo: F (0..N-1), U (-1), ∅ (-2)
+        uniform_int_distribution<> dist_idx(-1, (int)F.size() - 1);
+
         if (conjs.empty()) {
-            int idx = uniform_int_distribution<>(0,(int)F.size()-1)(rng);
-            ind.expr = Expression(F[idx], "F"+to_string(idx), {idx}, 0);
+            conjs.push_back(dist_idx(rng));
         } else {
-            shuffle(conjs.begin(), conjs.end(), rng);
-            ind.expr = build_random_expr(conjs, F, k, rng);
+            // Añadir o reemplazar un gen aleatoriamente
+            if (uniform_int_distribution<>(0,1)(rng) == 0 && !conjs.empty()) {
+                // Reemplazar
+                int pos = uniform_int_distribution<>(0,(int)conjs.size()-1)(rng);
+                conjs[pos] = dist_idx(rng);
+            } else {
+                // Añadir
+                conjs.push_back(dist_idx(rng));
+            }
         }
-    } else if (tipo == 1) {
-        // Reemplazar un conjunto
-        if (conjs.empty()) {
-            int idx = uniform_int_distribution<>(0,(int)F.size()-1)(rng);
-            ind.expr = Expression(F[idx], "F"+to_string(idx), {idx}, 0);
-        } else {
-            int pos = uniform_int_distribution<>(0,(int)conjs.size()-1)(rng);
-            conjs[pos] = uniform_int_distribution<>(0,(int)F.size()-1)(rng);
-            shuffle(conjs.begin(), conjs.end(), rng);
-            ind.expr = build_random_expr(conjs, F, k, rng);
-        }
-    } else {
-        // Añadir un nuevo conjunto
-        conjs.push_back(uniform_int_distribution<>(0,(int)F.size()-1)(rng));
+        
         shuffle(conjs.begin(), conjs.end(), rng);
-        ind.expr = build_random_expr(conjs, F, k, rng);
+        ind.expr = build_random_expr(conjs, F, U, k, rng);
+
+    } else {
+        // --- Tipo 1: Mutación de Crecimiento (Ajuste Fino) ---
+        // Coge al individuo y le aplica una operación con un bloque base.
+        // No destruye la estructura, solo la hace crecer.
+        
+        int new_ops = ind.n_ops + 1; // +1 porque el bloque base es n_ops=0
+        if (new_ops > k) {
+            // Demasiado profundo, abortamos la mutación
+            return; 
+        }
+
+        std::uniform_int_distribution<int> dist_op(0, 2);
+        std::uniform_int_distribution<int> dist_base(0, bloques_base.size() - 1);
+    
+        int op = dist_op(rng);
+        const SolMO& right = bloques_base[dist_base(rng)];
+        string op_str = (op == 0) ? " ∪ " : (op == 1) ? " ∩ " : " \\ ";
+
+        Bitset new_set;
+        string new_expr;
+        
+        // Aplicar la operación (50/50 de qué lado va)
+        if (uniform_int_distribution<>(0,1)(rng) == 0) {
+            // (Individuo op BloqueBase)
+            if (op == 0) new_set = set_union(ind.expr.conjunto, right.expr.conjunto);
+            else if (op == 1) new_set = set_intersect(ind.expr.conjunto, right.expr.conjunto);
+            else new_set = set_difference(ind.expr.conjunto, right.expr.conjunto);
+            new_expr = "(" + ind.expr.expr_str + op_str + right.expr.expr_str + ")";
+        } else {
+            // (BloqueBase op Individuo)
+            if (op == 0) new_set = set_union(right.expr.conjunto, ind.expr.conjunto);
+            else if (op == 1) new_set = set_intersect(right.expr.conjunto, ind.expr.conjunto);
+            else new_set = set_difference(right.expr.conjunto, ind.expr.conjunto);
+            new_expr = "(" + right.expr.expr_str + op_str + ind.expr.expr_str + ")";
+        }
+
+        set<int> combined_sets = ind.expr.used_sets;
+        combined_sets.insert(right.expr.used_sets.begin(), right.expr.used_sets.end());
+
+        ind.expr = Expression(new_set, new_expr, combined_sets, new_ops);
     }
     
-    ind.n_ops = ind.expr.n_ops;
+    // --- RE-EVALUAR (Común a ambos tipos) ---
+    ind.jaccard = M(ind.expr, G, Metric::Jaccard);
+    ind.sizeH   = (int)M(ind.expr, G, Metric::SizeH);
+    ind.n_ops   = ind.expr.n_ops;
 }
 
 // ============================================================================
 // Inicialización aleatoria
 // ============================================================================
-vector<Individuo> inicializar_poblacion(const vector<Bitset>& F,
+vector<Individuo> inicializar_poblacion(const vector<Bitset>& F, const Bitset& U,
                                         const Bitset& G, int k, int pop_size, mt19937& rng) {
     vector<Individuo> pop;
     pop.reserve(pop_size);
@@ -382,17 +636,20 @@ vector<Individuo> inicializar_poblacion(const vector<Bitset>& F,
     vistos_expr.reserve(pop_size * 2);
 
     while ((int)pop.size() < pop_size) {
-        int max_sets = min<int>((int)F.size(), k+1);
+        int max_sets = min<int>((int)F.size()+1, k+1);
         int num_conjs = uniform_int_distribution<>(1, max_sets)(rng);
 
         set<int> usados;
+
+        uniform_int_distribution<> dist_idx(-1, (int)F.size()-1);
+
         for (int i = 0; i < num_conjs; ++i)
-            usados.insert(uniform_int_distribution<>(0,(int)F.size()-1)(rng));
+            usados.insert(dist_idx(rng));
 
         vector<int> conjs(usados.begin(), usados.end());
         if (conjs.empty()) continue;
 
-        Expression e = build_random_expr(conjs, F, k, rng);
+        Expression e = build_random_expr(conjs, F, U, k, rng);
         auto keyE = key_of_expr(e);
         if (!vistos_expr.insert(keyE).second) continue;
 

@@ -79,7 +79,6 @@ def compilar_programa(u_size):
         src_dir / 'metrics.cpp',
         src_dir / 'greedy.cpp',
         src_dir / 'genetico.cpp',
-        src_dir / 'spea2.cpp',
         src_dir / 'generator.cpp',
         src_dir / 'ground_truth.cpp'
     ]
@@ -97,7 +96,7 @@ def compilar_programa(u_size):
         '-std=c++17',
         '-O3',
         f'-I{include_dir}',
-        '-o', str(build_dir / 'programa')
+        '-o', str(build_dir / 'main')
     ] + [str(s) for s in sources]
     
     # Compilar
@@ -109,7 +108,7 @@ def compilar_programa(u_size):
         sys.exit(1)
     
     print("✓ Compilación exitosa!")
-    return build_dir / 'programa'
+    return build_dir / 'main'
 
 def ejecutar_experimento(programa_path, config, seed, num_ejecucion, total, algo="all", extra_args=None):
     """Ejecuta el programa con una semilla específica"""
@@ -255,11 +254,9 @@ def ejecutar_experimentos_small(programa_path, config, override_algo=None):
     results_dir = PROJECT_ROOT / paths_cfg['results_small']
     resultados_file = results_dir / f"{timestamp}_resultados_small.txt"
     reprod_file = results_dir / f"{timestamp}_reproducibilidad_small.txt"
-    resumen_csv = results_dir / f"{timestamp}_resumen_small.csv"
     
     with open(resultados_file, 'w', encoding='utf-8') as f_res, \
-         open(reprod_file, 'w', encoding='utf-8') as f_rep, \
-         open(resumen_csv, 'w', encoding='utf-8') as f_csv:
+         open(reprod_file, 'w', encoding='utf-8') as f_rep:
         
         # Escribir encabezados
         f_res.write("=" * 80 + "\n")
@@ -271,10 +268,7 @@ def ejecutar_experimentos_small(programa_path, config, override_algo=None):
         f_rep.write(f"DATOS DE REPRODUCIBILIDAD - SMALL\n")
         f_rep.write(f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f_rep.write("=" * 80 + "\n\n")
-        
-        # CSV header
-        f_csv.write("experimento,semilla,algoritmo,tiempo_ms,num_pareto,mejor_jaccard,u_size,g_size,f_count,k\n")
-        
+              
         # Escribir parámetros globales
         f_rep.write("PARÁMETROS DE CONFIGURACIÓN:\n")
         f_rep.write(f"  U_SIZE: {config['U_size']}\n")
@@ -309,17 +303,7 @@ def ejecutar_experimentos_small(programa_path, config, override_algo=None):
             f_rep.write(f"EXPERIMENTO {i} - SEMILLA: {seed}\n")
             f_rep.write(f"{'='*80}\n")
             f_rep.write(f"Tamaño universo U: {datos['u_size']}\n")
-            f_rep.write(f"Cardinal de G: {datos['g_size']}\n")
-            f_rep.write(f"Número de conjuntos en F: {datos['f_count']}\n")
-            f_rep.write(f"k: {datos['k']}\n\n")
             
-            # Información por algoritmo
-            for algo_name, algo_data in datos['algoritmos'].items():
-                # CSV: una fila por algoritmo
-                f_csv.write(f"{i},{seed},{algo_name},{algo_data['tiempo_ms']},")
-                f_csv.write(f"{algo_data['num_pareto']},{algo_data.get('mejor_jaccard', 'N/A')},")
-                f_csv.write(f"{datos['u_size']},{datos['g_size']},{datos['f_count']},{datos['k']}\n")
-            # NUEVO: Guardar conjuntos
             if datos.get('conjuntos'):
             	f_rep.write("CONJUNTOS DE LA INSTANCIA:\n")
             	f_rep.write(f"  Conjunto G (elementos): {datos['conjuntos'].get('G', 'N/A')}\n")
@@ -331,18 +315,17 @@ def ejecutar_experimentos_small(programa_path, config, override_algo=None):
             		f_rep.write("\n")
 				
             f_rep.write(f"Comando para reproducir:\n")
-            f_rep.write(f"  ./build/programa --algo all --G {cfg['G_size_min']} ")
+            f_rep.write(f"  ./build/main --algo all --G {cfg['G_size_min']} ")
             f_rep.write(f"--Fmin {cfg['F_n_min']} --Fmax {cfg['F_n_max']} ")
             f_rep.write(f"--FsizeMin {cfg['Fi_size_min']} --FsizeMax {cfg['Fi_size_max']} ")
             f_rep.write(f"--k {cfg['k']} --seed {seed} --time_limit 150\n\n")
             
             # Resumen en consola
-            print(f"  ✓ Experimento {i} completado:")
+            print(f"  ✓ Experimento {i} completado")
     
     print(f"✓ Experimentos SMALL completados")
     print(f"  - Resultados: {resultados_file}")
     print(f"  - Reproducibilidad: {reprod_file}")
-    print(f"  - Resumen CSV: {resumen_csv}\n")
 
 def ejecutar_experimentos_batch(programa_path, config):
     """Ejecuta los experimentos batch (50 instancias - greedy y generico)"""
@@ -356,18 +339,16 @@ def ejecutar_experimentos_batch(programa_path, config):
     	seeds = list(range(start, start + count))
     	
     print("\n" + "="*80)
-    print("EXPERIMENTOS BATCH (Greedy)")
+    print("EXPERIMENTOS BATCH (Greedy + Genético)")
     print("="*80 + "\n")
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     results_dir = PROJECT_ROOT / paths_cfg['results_batch']
     resultados_file = results_dir / f"{timestamp}_resultados_batch.txt"
     reprod_file = results_dir / f"{timestamp}_reproducibilidad_batch.txt"
-    resumen_file = results_dir / f"{timestamp}_resumen_batch.csv"
     
     with open(resultados_file, 'w', encoding='utf-8') as f_res, \
-         open(reprod_file, 'w', encoding='utf-8') as f_rep, \
-         open(resumen_file, 'w', encoding='utf-8') as f_csv:
+         open(reprod_file, 'w', encoding='utf-8') as f_rep:
         
         # Encabezados
         f_res.write("=" * 80 + "\n")
@@ -380,11 +361,8 @@ def ejecutar_experimentos_batch(programa_path, config):
         f_rep.write(f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f_rep.write("=" * 80 + "\n\n")
         
-        # CSV header
-        f_csv.write("experimento,semilla,tiempo_ms,num_pareto,mejor_jaccard,u_size,g_size,f_count\n")
-        
         # Parámetros efectivos
-        f_rep.write("PARÁMETROS (BATCH - efectivos):\n")
+        f_rep.write("PARÁMETROS DE CONFIGURACIÓN:\n")
         f_rep.write(f"  U_SIZE: {config['U_size']}\n")
         f_rep.write(f"  G_SIZE_MIN: {cfg['G_size_min']}\n")
         f_rep.write(f"  F_N_MIN: {cfg['F_n_min']}\n")
@@ -397,7 +375,7 @@ def ejecutar_experimentos_batch(programa_path, config):
         
         # Ejecutar experimentos
         for i, seed in enumerate(seeds, 1):
-            output = ejecutar_experimento(programa_path, config, seed, i, len(seeds), algo="both")
+            output = ejecutar_experimento(programa_path, cfg, seed, i, len(seeds), algo="both")
             if output is None:
                 continue
             
@@ -410,27 +388,34 @@ def ejecutar_experimentos_batch(programa_path, config):
             f_res.write(ocultar_conjuntos_en_texto(datos['salida_completa']))
             f_res.write("\n")
             
-            # Extraer datos del greedy
-            greedy_data = datos['algoritmos'].get('greedy', {})
-            tiempo_ms = greedy_data.get('tiempo_ms', 'N/A')
-            num_pareto = greedy_data.get('num_pareto', 'N/A')
-            mejor_jaccard = greedy_data.get('mejor_jaccard', 'N/A')
+            # Guardar reproducibilidad
+            f_rep.write(f"\n{'='*80}\n")
+            f_rep.write(f"EXPERIMENTO {i} - SEMILLA: {seed}\n")
+            f_rep.write(f"{'='*80}\n")
+            f_rep.write(f"Tamaño universo U: {datos['u_size']}\n")
             
-            # Reproducibilidad (más compacto para 50 instancias)
-            f_rep.write(f"EXP_{i:03d} | SEED: {seed} | T: {tiempo_ms}ms | ")
-            f_rep.write(f"Pareto: {num_pareto} | Jaccard: {mejor_jaccard} | ")
-            f_rep.write(f"G: {datos['g_size']} | F: {datos['f_count']}\n")
+            if datos.get('conjuntos'):
+            	f_rep.write("CONJUNTOS DE LA INSTANCIA:\n")
+            	f_rep.write(f"  Conjunto G (elementos): {datos['conjuntos'].get('G', 'N/A')}\n")
+            	f_rep.write(f"  Número de conjuntos F: {datos['conjuntos'].get('F_count', 'N/A')}\n")
+            	f_rep.write(f"  Conjuntos F_i:")
+            	for key, value in datos['conjuntos'].items():
+            		if key.startswith('F') and key != 'F_count':
+            			f_rep.write(f"    {key}: {value}\n")
+            		f_rep.write("\n")
+				
+            f_rep.write(f"Comando para reproducir:\n")
+            f_rep.write(f"  ./build/main --algo both --G {cfg['G_size_min']} ")
+            f_rep.write(f"--Fmin {cfg['F_n_min']} --Fmax {cfg['F_n_max']} ")
+            f_rep.write(f"--FsizeMin {cfg['Fi_size_min']} --FsizeMax {cfg['Fi_size_max']} ")
+            f_rep.write(f"--k {cfg['k']} --seed {seed}\n\n")
             
-            # CSV
-            f_csv.write(f"{i},{seed},{tiempo_ms},{num_pareto},{mejor_jaccard},")
-            f_csv.write(f"{datos['u_size']},{datos['g_size']},{datos['f_count']}\n")
-            
-            print(f"  ✓ [{i:2d}/{len(seeds)}] Semilla {seed}: {tiempo_ms}ms, Pareto: {num_pareto}")
+            # Resumen en consola
+            print(f"  ✓ Experimento {i} completado")
     
     print(f"\n✓ Experimentos BATCH completados")
     print(f"  - Resultados: {resultados_file}")
     print(f"  - Reproducibilidad: {reprod_file}")
-    print(f"  - Resumen CSV: {resumen_file}\n")
 
 def main():
     print("="*80)

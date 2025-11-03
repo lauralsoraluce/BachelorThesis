@@ -24,9 +24,10 @@
 // Genera todas las expresiones posibles hasta profundidad k
 // a partir de la familia F y el universo U.
 //------------------------------------------------------------------
-std::vector<std::vector<Expression>> exhaustive_search(
+std::vector<SolMO> exhaustive_search(
     const std::vector<Bitset>& F,
     const Bitset& U,
+    const Bitset& G,
     int k);
 
 //------------------------------------------------------------------

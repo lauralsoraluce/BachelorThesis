@@ -42,42 +42,50 @@ static void print_set_indices(const Bitset& B, int U=128, int max_show=40) {
 
 static void print_conjuntos(const Bitset& G, const std::vector<Bitset>& F) {
     cout << "=== CONJUNTOS ===" << endl;
-
     cout << "CONJUNTO_G: ";
     for (int i = 0; i < U_size; ++i) {
-        if (G[i]) cout << i << ",";
+        if (G[i]) {
+            cout << i << ",";
+        }
     }
-    cout << "\n";
+    cout << "\n\n";
 
     cout << "NUM_CONJUNTOS_F: " << F.size() << "\n";
     for (size_t j = 0; j < F.size(); ++j) {
         cout << "F" << j << ": ";
         for (int i = 0; i < U_size; ++i) {
-            if (F[j][i]) cout << i << ",";
+            if (F[j][i]) {
+                cout << i << ",";
+            }
         }
-        cout << "\n\n";
-    }    
+        cout << "\n";
+    }
+    cout << "\n";
 }
 
 int main(int argc, char** argv) {
     int G_size_min= 10;
     int F_n_min= 5;
-    int F_n_max= 100;
+    int F_n_max= 15;
     int Fi_size_min= 5;
-    int Fi_size_max= 100;
-    int k= 10;
-    int seed= 1030;
+    int Fi_size_max= 40;
+    int k= 3;
+    int seed= 1002;
     bool ejecutar_exhaustiva= true;
     bool ejecutar_greedy= true;
-    bool ejecutar_genetico= true;
-    int pop_size=800;
-    double mutation_prob= 0.55;      
-    double crossover_prob= 0.85;     
-    int tournament_size= 2;         
+    bool ejecutar_genetico= false;
+    int pop_size=150;
+    double mutation_prob= 0.5;      
+    double crossover_prob= 0.8;     
+    int tournament_size= 5;         
     int max_generations= 1e9;       
-    int time_limit= 1800;   
-    bool modo_test= false;
+    int time_limit= 900;   
+    bool modo_test= true;
     int seed_expr= (uint64_t)chrono::high_resolution_clock::now().time_since_epoch().count();      
+    
+    int n = U_size;
+    Bitset U;
+    for (int i = 0; i < n; ++i) U[i] = 1;
 
     for (int i = 1; i < argc; i++) {
         string a = argv[i];
@@ -106,19 +114,13 @@ int main(int argc, char** argv) {
     }
 
     if (modo_test) {
-        
-        int n = U_size;
-        Bitset U;
-        for (int i = 0; i < n; ++i) U[i] = 1;
 
         Bitset G = generar_G(n, G_size_min, seed);
         std::vector<Bitset> F = generar_F(n, F_n_min, F_n_max, Fi_size_min, Fi_size_max, seed);
 
         cout << "Semilla: " << seed << "\n";
         cout << "U_size: " << U_size << "\n";
-        cout << "G_size: " << G.count() << "\n";
-        cout << "F_count: " << F.size() << "\n";
-        cout << "k: " << k << "\n";
+        print_conjuntos(G, F); 
 
         vector<ResultadoAlgoritmo<SolMO>> resultados;
 
@@ -126,8 +128,7 @@ int main(int argc, char** argv) {
             // EXHAUSTIVA
             cout << "=== EXHAUSTIVA ===\n";
             auto t0 = chrono::high_resolution_clock::now();
-            auto expr = exhaustive_search(F, U, k);
-            auto soluciones = evaluar_subconjuntos(expr, G, k);
+            auto soluciones = exhaustive_search(F, U, G, k);
             auto t1 = chrono::high_resolution_clock::now();
             auto dur_ms = chrono::duration_cast<chrono::milliseconds>(t1 - t0).count();
 
@@ -139,7 +140,7 @@ int main(int argc, char** argv) {
             // GREEDY
             cout << "=== GREEDY ===\n";
             auto t0 = chrono::high_resolution_clock::now();
-            auto soluciones = greedy(F, G, k);
+            auto soluciones = greedy_multiobjective_search(F, U, G, k);
             auto t1 = chrono::high_resolution_clock::now();
             auto dur_ms = chrono::duration_cast<chrono::milliseconds>(t1 - t0).count();
 
@@ -168,7 +169,7 @@ int main(int argc, char** argv) {
             cout << "Generaciones máx.: " << ga_params.max_generations << "\n";
 
             auto t0 = chrono::high_resolution_clock::now();
-            auto soluciones = nsga2(F, G, k, ga_params);
+            auto soluciones = nsga2(F, U, G, k, ga_params);
             auto t1 = chrono::high_resolution_clock::now();
             auto dur_ms = chrono::duration_cast<chrono::milliseconds>(t1 - t0).count();
 
@@ -176,23 +177,22 @@ int main(int argc, char** argv) {
             print_pareto_front(soluciones);
             resultados.push_back({"Genetico_NSGA-II", individuos_a_solmos(soluciones), dur_ms});
         }
-
-        print_conjuntos(G, F);
     }
 
     if (!modo_test){
-        auto gt = make_groundtruth(U_size, F_n_min, F_n_max, Fi_size_min, Fi_size_max, k, seed);
+        auto gt = make_groundtruth(U, U_size, F_n_min, F_n_max, Fi_size_min, Fi_size_max, k, seed);
 
         cout << "=== INSTANCIA ===\n";
         cout << "Semilla: " << gt.seed << "\n";
         cout << "U_size: " << U_size << "\n";
-        cout << "F_count: " << gt.F.size() << "\n";
         cout << "k: " << k << "\n";
-        cout << "Expresion_oro: " << gt.gold_expr.expr_str << "\n";
+        cout << "Expresion de referencia: " << gt.gold_expr.expr_str << "\n";
         cout << "Jaccard_objetivo: " << M(gt.gold_expr, gt.G, Metric::Jaccard) << "\n";
-        cout << "G_indices: ";
-        print_set_indices(gt.G, U_size, 64);
         cout << "\n";
+        
+        cout << "@@@REPRO_DATA_START@@@\n";
+        print_conjuntos(gt.G, gt.F); 
+        cout << "@@@REPRO_DATA_END@@@\n";
 
         GAParams ga_params;
         ga_params.population_size   = pop_size;
@@ -204,7 +204,7 @@ int main(int argc, char** argv) {
         ga_params.seed              = seed_expr;
 
         auto t0 = chrono::steady_clock::now();
-        auto pareto = nsga2(gt.F, gt.G, k, ga_params);
+        auto pareto = nsga2_parada(gt.F, U, gt.G, k, ga_params);
         auto t1 = chrono::steady_clock::now();
         auto dur_ms = chrono::duration_cast<chrono::milliseconds>(t1 - t0).count();
 
@@ -214,12 +214,21 @@ int main(int argc, char** argv) {
                 << " | Limite_tiempo_s: " << ga_params.time_limit_sec
                 << " | p_mut: " << ga_params.mutation_prob
                 << " | p_cruce: " << ga_params.crossover_prob
-                << " | torneo: " << ga_params.tournament_size << "\n\n"; 
+                << " | torneo: " << ga_params.tournament_size << "\n"; 
 
         print_pareto_front(pareto);
         bool hit = any_of(pareto.begin(), pareto.end(), [](const auto& s) {
             return s.jaccard == 1.0; });
-        cout << "HIT_OBJETIVO: " << (hit ? "SI" : "NO") << "\n";
+        cout << "HIT_OBJETIVO: " << (hit ? "SI" : "NO") << "\n\n\n";
+
+        cout << "=== GREEDY ===\n";
+        auto t00 = chrono::high_resolution_clock::now();
+        auto soluciones = greedy_multiobjective_search(gt.F, U, gt.G, k);
+        auto t11 = chrono::high_resolution_clock::now();
+        dur_ms = chrono::duration_cast<chrono::milliseconds>(t11 - t00).count();
+
+        cout <<"Tiempo_ejecucion_ms: " << dur_ms << "\n";
+        print_pareto_front(soluciones);
     }
     return 0;
 

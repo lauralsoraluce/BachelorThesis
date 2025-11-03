@@ -27,7 +27,8 @@ struct GroundTruthInstance {
 //------------------------------------------------------------------
 // Construcción de la instancia ground-truth
 //------------------------------------------------------------------
-GroundTruthInstance make_groundtruth(int n = 128,
+GroundTruthInstance make_groundtruth(const Bitset& U, 
+                                     int n = 128,
                                      int n_min = 6,
                                      int n_max = 10,
                                      int tam_min = 10,

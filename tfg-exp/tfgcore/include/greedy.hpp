@@ -20,6 +20,11 @@ std::vector<SolMO> greedy(
     const Bitset& U,
     int k);
 
+std::vector<SolMO> greedy_multiobjective_search(
+    const std::vector<Bitset>& F,
+    const Bitset& U,
+    const Bitset& G,
+    int k);
 //------------------------------------------------------------------
 // Mostrar el frente de Pareto por consola
 //------------------------------------------------------------------
