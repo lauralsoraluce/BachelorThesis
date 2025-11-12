@@ -36,13 +36,7 @@ std::vector<Individuo> nsga2(
     const Bitset& G,
     int k,
     const GAParams& params);
-
-std::vector<Individuo> nsga2_parada(
-    const vector<Bitset>& F,
-    const Bitset& U,
-    const Bitset& G,
-    int k,
-    const GAParams& params);
+    
 //------------------------------------------------------------------
 // Construcción aleatoria de expresiones (individuos)
 //------------------------------------------------------------------

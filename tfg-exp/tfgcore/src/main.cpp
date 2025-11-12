@@ -27,19 +27,6 @@ inline std::vector<SolMO> individuos_a_solmos(const std::vector<Individuo>& v) {
 }
 
 
-static void print_set_indices(const Bitset& B, int U=128, int max_show=40) {
-    int shown = 0;
-    for (int i = 0; i < U; ++i) {
-        if (B[i]) {
-            cout << i << ",";
-            if (++shown >= max_show) { cout << " ..."; break; }
-            cout << " ";
-        }
-    }
-    cout << "\n";
-}
-
-
 static void print_conjuntos(const Bitset& G, const std::vector<Bitset>& F) {
     cout << "=== CONJUNTOS ===" << endl;
     cout << "CONJUNTO_G: ";
@@ -204,7 +191,7 @@ int main(int argc, char** argv) {
         ga_params.seed              = seed_expr;
 
         auto t0 = chrono::steady_clock::now();
-        auto pareto = nsga2_parada(gt.F, U, gt.G, k, ga_params);
+        auto pareto = nsga2(gt.F, U, gt.G, k, ga_params);
         auto t1 = chrono::steady_clock::now();
         auto dur_ms = chrono::duration_cast<chrono::milliseconds>(t1 - t0).count();
 

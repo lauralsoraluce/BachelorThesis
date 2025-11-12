@@ -221,16 +221,13 @@ def crear_directorios(config):
     """Crea los directorios necesarios para los resultados"""
     results_small = PROJECT_ROOT / config.get('results_small', 'results/small')
     results_batch = PROJECT_ROOT / config.get('results_batch', 'results/batch')
-    logs = PROJECT_ROOT / config.get('logs','logs')
     
     results_small.mkdir(parents=True, exist_ok=True)
     results_batch.mkdir(parents=True, exist_ok=True)
-    logs.mkdir(parents=True, exist_ok=True)
     
     print(f"✓ Directorios creados:")
     print(f"  - {results_small}")
     print(f"  - {results_batch}")
-    print(f"  - {logs}")
 
 def ejecutar_experimentos_small(programa_path, config, override_algo=None):
     """Ejecuta los experimentos pequeños (exhaustiva + greedy + genetico)"""
@@ -253,7 +250,7 @@ def ejecutar_experimentos_small(programa_path, config, override_algo=None):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     results_dir = PROJECT_ROOT / paths_cfg['results_small']
     resultados_file = results_dir / f"{timestamp}_resultados_small.txt"
-    reprod_file = results_dir / f"{timestamp}_reproducibilidad_small.txt"
+    reprod_file = results_dir / f"{timestamp}_dataset_small.txt"
     
     with open(resultados_file, 'w', encoding='utf-8') as f_res, \
          open(reprod_file, 'w', encoding='utf-8') as f_rep:
@@ -265,7 +262,7 @@ def ejecutar_experimentos_small(programa_path, config, override_algo=None):
         f_res.write("=" * 80 + "\n\n")
         
         f_rep.write("=" * 80 + "\n")
-        f_rep.write(f"DATOS DE REPRODUCIBILIDAD - SMALL\n")
+        f_rep.write(f"DATASET - SMALL\n")
         f_rep.write(f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f_rep.write("=" * 80 + "\n\n")
               
@@ -282,10 +279,12 @@ def ejecutar_experimentos_small(programa_path, config, override_algo=None):
         f_rep.write(f"  ALGORITMOS: exhaustiva, greedy, genetico\n\n")
         
         algo_to_run = override_algo or "all"
+        timeout_ga = cfg['timeouts']['ga_default_sec']
+        ga_args = ['--time_limit', str(timeout_ga)]
         
         # Ejecutar experimentos
         for i, seed in enumerate(seeds, 1):
-            output = ejecutar_experimento(programa_path, cfg, seed, i, len(seeds), algo=algo_to_run, extra_args=['--time_limit', '150'])
+            output = ejecutar_experimento(programa_path, cfg, seed, i, len(seeds), algo=algo_to_run, extra_args=ga_args)
             if output is None:
                 continue
             
@@ -318,14 +317,14 @@ def ejecutar_experimentos_small(programa_path, config, override_algo=None):
             f_rep.write(f"  ./build/main --algo all --G {cfg['G_size_min']} ")
             f_rep.write(f"--Fmin {cfg['F_n_min']} --Fmax {cfg['F_n_max']} ")
             f_rep.write(f"--FsizeMin {cfg['Fi_size_min']} --FsizeMax {cfg['Fi_size_max']} ")
-            f_rep.write(f"--k {cfg['k']} --seed {seed} --time_limit 150\n\n")
+            f_rep.write(f"--k {cfg['k']} --seed {seed} --time_limit {timeout_ga}\n\n")
             
             # Resumen en consola
             print(f"  ✓ Experimento {i} completado")
     
     print(f"✓ Experimentos SMALL completados")
     print(f"  - Resultados: {resultados_file}")
-    print(f"  - Reproducibilidad: {reprod_file}")
+    print(f"  - Dataset: {reprod_file}")
 
 def ejecutar_experimentos_batch(programa_path, config):
     """Ejecuta los experimentos batch (50 instancias - greedy y generico)"""
@@ -345,7 +344,7 @@ def ejecutar_experimentos_batch(programa_path, config):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     results_dir = PROJECT_ROOT / paths_cfg['results_batch']
     resultados_file = results_dir / f"{timestamp}_resultados_batch.txt"
-    reprod_file = results_dir / f"{timestamp}_reproducibilidad_batch.txt"
+    reprod_file = results_dir / f"{timestamp}_dataset_batch.txt"
     
     with open(resultados_file, 'w', encoding='utf-8') as f_res, \
          open(reprod_file, 'w', encoding='utf-8') as f_rep:
@@ -357,7 +356,7 @@ def ejecutar_experimentos_batch(programa_path, config):
         f_res.write("=" * 80 + "\n\n")
         
         f_rep.write("=" * 80 + "\n")
-        f_rep.write(f"DATOS DE REPRODUCIBILIDAD - BATCH\n")
+        f_rep.write(f"DATASET - BATCH\n")
         f_rep.write(f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f_rep.write("=" * 80 + "\n\n")
         
@@ -373,9 +372,12 @@ def ejecutar_experimentos_batch(programa_path, config):
         f_rep.write(f"  SEMILLAS: {seeds}\n")
         f_rep.write(f"  ALGORITMOS: greedy + genetico\n\n")
         
+        timeout_ga = cfg['timeouts']['ga_default_sec']
+        ga_args = ['--time_limit', str(timeout_ga)]
+        
         # Ejecutar experimentos
         for i, seed in enumerate(seeds, 1):
-            output = ejecutar_experimento(programa_path, cfg, seed, i, len(seeds), algo="both")
+            output = ejecutar_experimento(programa_path, cfg, seed, i, len(seeds), algo="both", extra_args=ga_args)
             if output is None:
                 continue
             
@@ -408,14 +410,14 @@ def ejecutar_experimentos_batch(programa_path, config):
             f_rep.write(f"  ./build/main --algo both --G {cfg['G_size_min']} ")
             f_rep.write(f"--Fmin {cfg['F_n_min']} --Fmax {cfg['F_n_max']} ")
             f_rep.write(f"--FsizeMin {cfg['Fi_size_min']} --FsizeMax {cfg['Fi_size_max']} ")
-            f_rep.write(f"--k {cfg['k']} --seed {seed}\n\n")
+            f_rep.write(f"--k {cfg['k']} --seed {seed} --time_limit {timeout_ga}\n\n")
             
             # Resumen en consola
             print(f"  ✓ Experimento {i} completado")
     
     print(f"\n✓ Experimentos BATCH completados")
     print(f"  - Resultados: {resultados_file}")
-    print(f"  - Reproducibilidad: {reprod_file}")
+    print(f"  - Dataset: {reprod_file}")
 
 def main():
     print("="*80)

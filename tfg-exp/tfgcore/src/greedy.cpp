@@ -115,38 +115,35 @@ vector<SolMO> greedy_multiobjective_search(
     bloques_base.reserve(F.size()+1);
 
     // --- Nivel 0: Generar, Evaluar y FILTRAR ---
-    {
-        // 1.a. Generar conjuntos base (F_i)
-        for (size_t i = 0; i < F.size(); i++) {
-            set<int> sets = {static_cast<int>(i)};
-            Expression e(F[i], "F" + to_string(i), sets, 0); 
-            double j = M(e, G, Metric::Jaccard);
-            int sizeH = M(e, G, Metric::SizeH);
-            bloques_base.emplace_back(e, 0, sizeH, j);
-        }
-        
-        // 1.b. Generar U
-        set<int> u_set = {}; 
-        Expression e_u(U, "U", u_set, 0);
-        double j_u = M(e_u, G, Metric::Jaccard);
-        int sizeH_u = M(e_u, G, Metric::SizeH);
-        bloques_base.emplace_back(e_u, 0, sizeH_u, j_u);
-
-        // 1.c. Generar Vacío
-        /*set<int> empty_sets;
-        Expression e_empty(Bitset(), "∅", empty_sets, 0);
-        double j_empty = M(e_empty, G, Metric::Jaccard);
-        int sizeH_empty = M(e_empty, G, Metric::SizeH);
-        bloques_base.emplace_back(e_empty, 0, sizeH_empty, j_empty);*/
-        
-        // 2. Calcular el frente inicial
-        frente_nivel[0] = pareto_front(bloques_base);
-        frente_global = frente_nivel[0]; // El primer frente global
+    // 1.a. Generar conjuntos base (F_i)
+    for (size_t i = 0; i < F.size(); i++) {
+        set<int> sets = {static_cast<int>(i)};
+        Expression e(F[i], "F" + to_string(i), sets, 0); 
+        double j = M(e, G, Metric::Jaccard);
+        int sizeH = M(e, G, Metric::SizeH);
+        bloques_base.emplace_back(e, 0, sizeH, j);
     }
+    
+    // 1.b. Generar U
+    set<int> u_set = {}; 
+    Expression e_u(U, "U", u_set, 0);
+    double j_u = M(e_u, G, Metric::Jaccard);
+    int sizeH_u = M(e_u, G, Metric::SizeH);
+    bloques_base.emplace_back(e_u, 0, sizeH_u, j_u);
 
-    // --- Generar niveles s = 1...k ---
-    for (int s = 1; s <= k; s++) {
-        
+    // 1.c. Generar Vacío
+    /*set<int> empty_sets;
+    Expression e_empty(Bitset(), "∅", empty_sets, 0);
+    double j_empty = M(e_empty, G, Metric::Jaccard);
+    int sizeH_empty = M(e_empty, G, Metric::SizeH);
+    bloques_base.emplace_back(e_empty, 0, sizeH_empty, j_empty);*/
+    
+    // 2. Calcular el frente inicial
+    frente_nivel[0] = pareto_front(bloques_base);
+    frente_global = frente_nivel[0]; // El primer frente global
+
+    int s=1; 
+    while (s <= k && !frente_nivel[s-1].empty()) {
         vector<SolMO> candidatos_s;
         
         for (int op = 0; op < 3; op++) {
@@ -181,17 +178,8 @@ vector<SolMO> greedy_multiobjective_search(
                 }
             }
         }
-        
-        if (candidatos_s.empty()) {
-            continue; 
-        }
 
-        // 1. Obtener el frente local de este nivel
         vector<SolMO> frente_local_s = pareto_front(candidatos_s);
-        
-        if (frente_local_s.empty()) {
-            continue; 
-        }
 
         // 2. *** PODA ESTRICTA ***
         // (La misma lógica de poda que implementamos antes)
@@ -213,8 +201,7 @@ vector<SolMO> greedy_multiobjective_search(
         
         // 5. Asignamos el nuevo frente global para la siguiente iteración
         frente_global = std::move(new_global_front);
+        s++;
     }
-    
-    // Devolvemos el frente global final
     return frente_global;
 }

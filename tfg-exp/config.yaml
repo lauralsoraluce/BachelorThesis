@@ -11,10 +11,18 @@ small_config:
   seeds: [1002, 1003, 1004, 1005]
   instances: 4
   timeouts:
-    exhaustive_sec: 60
-    greedy_sec: 30
     ga_default_sec: 150
 
+genetico_config:
+  G_size_min: 10
+  k: 10
+  F_n_min: 5
+  F_n_max: 80
+  Fi_size_min: 5
+  Fi_size_max: 100
+  seeds: [1000, 1010, 1020, 1030, 1040, 1050, 1060, 1070, 1080, 1090, 2000, 2010, 2020, 2030, 2040, 2050, 2060, 2070, 2080, 2090]
+  timeouts:
+    ga_default_sec: 900
 
 batch_config:
   G_size_min: 10
@@ -26,11 +34,11 @@ batch_config:
   seed_start: 2001
   instances: 50
   timeouts:
-    greedy_sec: 30
-    ga_default_sec: 600
+    ga_default_sec: 900
 
 # --- Rutas ---
 paths:
   results_small: "results/small"
   results_batch: "results/batch"
-  logs: "logs"
+  results_genetico: "results/exp_genetico"
+
